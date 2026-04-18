@@ -611,7 +611,7 @@ def _format_trending_block(headlines: list[dict], limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def generate_conspiracy(
+def _build_user_prompt(
     thing_a: str,
     thing_b: str,
     deeper_context: str | None = None,
@@ -619,11 +619,8 @@ def generate_conspiracy(
     context_a: dict | None = None,
     context_b: dict | None = None,
     trending: list[dict] | None = None,
-) -> dict:
-    """Generate a drop via Anthropic tool-use — no JSON-string round-trip, so
-    unescaped quotes in the body can't break the return value."""
-    client = _anthropic_client()
-
+    fact_check_avoids: list[str] | None = None,
+) -> str:
     parts = [
         f"Generate a satirical conspiracy theory connecting:",
         f"  A: {thing_a}",
@@ -660,32 +657,217 @@ def generate_conspiracy(
                 f"something concrete. The conspiracy link remains absurdly "
                 f"satirical."
             )
+    if fact_check_avoids:
+        parts.append(
+            "\nFACT-CHECK NOTES FROM A PREVIOUS ATTEMPT — the following "
+            "claims were wrong. Do NOT repeat them; build the conspiracy "
+            "around different real facts instead:\n"
+            + "\n".join(f"  - {issue}" for issue in fact_check_avoids)
+        )
     parts.append(
         "\nREMEMBER: no bracketed-timestamp evidence prefixes, no censor "
         "blocks (██/##/XX), no invented Instagram stories or interviews. "
         "Call emit_conspiracy with the drop, or emit_refusal if either input "
         "is a private non-famous individual."
     )
+    return "\n".join(parts)
+
+
+def generate_conspiracy(
+    thing_a: str,
+    thing_b: str,
+    deeper_context: str | None = None,
+    interests: list | None = None,
+    context_a: dict | None = None,
+    context_b: dict | None = None,
+    trending: list[dict] | None = None,
+) -> dict:
+    """Generate a drop via Anthropic tool-use. Runs a fact-check pass after
+    generation. Minor errors get surgically fixed; major errors (where the
+    conspiracy's logic depends on a wrong fact) trigger one full regeneration
+    with the bad claims blacklisted."""
+    client = _anthropic_client()
+    max_attempts = 2
+    fact_check_avoids: list[str] = []
+
+    for attempt in range(max_attempts):
+        user_prompt = _build_user_prompt(
+            thing_a, thing_b,
+            deeper_context=deeper_context,
+            interests=interests,
+            context_a=context_a,
+            context_b=context_b,
+            trending=trending,
+            fact_check_avoids=fact_check_avoids or None,
+        )
+        msg = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            system=_system_prompt(),
+            tools=CONSPIRACY_TOOLS,
+            tool_choice={"type": "any"},
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        out = None
+        for block in msg.content:
+            if getattr(block, "type", None) == "tool_use":
+                out = dict(block.input or {})
+                out["refused"] = bool(out.get("refused", block.name == "emit_refusal"))
+                if isinstance(out.get("body"), str):
+                    out["body"] = _sanitize_body(out["body"])
+                break
+        if not out:
+            return {"refused": True, "reason": "the oracle went silent — try again."}
+        if out.get("refused"):
+            return out
+
+        # Fact-check pass.
+        fc = _fact_check(out["body"], thing_a, thing_b)
+        severity = fc.get("severity", "none")
+
+        if severity == "none" or fc.get("passed"):
+            out["_fact_check"] = {"passed": True, "issues": []}
+            return out
+
+        if severity == "minor" and fc.get("corrected_body"):
+            # Surgical fix — swap the bad facts, keep the conspiracy.
+            corrected = _sanitize_body(fc["corrected_body"])
+            # Re-check: the correction itself might have introduced new errors.
+            fc2 = _fact_check(corrected, thing_a, thing_b)
+            if fc2.get("passed") or fc2.get("severity", "none") == "none":
+                out["body"] = corrected
+                out["_fact_check"] = {
+                    "passed": True,
+                    "severity": "minor",
+                    "issues": fc.get("issues", []),
+                    "fixed": True,
+                }
+                return out
+            # Correction introduced new problems — treat as major, regenerate.
+            if attempt < max_attempts - 1:
+                fact_check_avoids = fc.get("issues", []) + fc2.get("issues", [])
+                continue
+            # Out of retries — return the corrected version with a warning.
+            out["body"] = corrected
+            out["_fact_check"] = {
+                "passed": False,
+                "severity": "minor",
+                "issues": fc2.get("issues", []),
+            }
+            return out
+
+        # severity == "major" — conspiracy logic depends on wrong facts.
+        # Retry once with the bad claims blacklisted.
+        if attempt < max_attempts - 1:
+            fact_check_avoids = fc.get("issues", [])
+            continue
+
+        # Final attempt also failed — return what we have with a warning.
+        if fc.get("corrected_body"):
+            out["body"] = _sanitize_body(fc["corrected_body"])
+        out["_fact_check"] = {
+            "passed": False,
+            "severity": "major",
+            "issues": fc.get("issues", []),
+        }
+        return out
+
+    return {"refused": True, "reason": "the oracle went silent — try again."}
+
+
+FACT_CHECK_TOOLS = [{
+    "name": "emit_fact_check",
+    "description": "Return the fact-check verdict for a conspiracy drop.",
+    "input_schema": {
+        "type": "object",
+        "required": ["passed", "severity", "issues", "corrected_body"],
+        "properties": {
+            "passed": {"type": "boolean", "description": "True if all factual claims are accurate or clearly absurdist fiction."},
+            "severity": {
+                "type": "string",
+                "enum": ["none", "minor", "major"],
+                "description": (
+                    "none = no issues. "
+                    "minor = small factual errors (wrong date, wrong name) that "
+                    "can be fixed with simple swaps without changing the "
+                    "conspiracy's logic. "
+                    "major = the conspiracy's core logic depends on a wrong fact "
+                    "(e.g. the whole thread hinges on two events happening on "
+                    "the same date but they didn't) — a surgical fix would make "
+                    "the drop incoherent."
+                ),
+            },
+            "issues": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of factual inaccuracies found (empty if passed).",
+            },
+            "corrected_body": {
+                "type": "string",
+                "description": (
+                    "For severity=minor: the body with factual errors fixed, "
+                    "preserving tone/structure/length. "
+                    "For severity=major: empty string (caller will regenerate). "
+                    "For severity=none: identical to original."
+                ),
+            },
+        },
+    },
+}]
+
+
+def _fact_check(body: str, thing_a: str, thing_b: str) -> dict:
+    """Run a second LLM pass to verify factual claims in the generated drop.
+    Returns {"passed": bool, "severity": str, "issues": [...], "corrected_body": str}."""
+    try:
+        client = _anthropic_client()
+    except RuntimeError:
+        return {"passed": True, "severity": "none", "issues": [], "corrected_body": body}
 
     msg = client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=2000,
-        system=_system_prompt(),
-        tools=CONSPIRACY_TOOLS,
-        tool_choice={"type": "any"},
-        messages=[{"role": "user", "content": "\n".join(parts)}],
+        system=(
+            "You are a fact-checker for satirical conspiracy theory drops. "
+            "The drops connect two real topics in absurd, fictional ways — "
+            "the CONNECTIONS are invented satire and should NOT be flagged. "
+            "Your job is to check that any stated REAL-WORLD FACTS are accurate: "
+            "dates, names, locations, statistics, event descriptions, song titles, "
+            "company details, historical events, etc. "
+            "If a claim is clearly absurdist fiction (e.g. 'Beyoncé's stylist "
+            "is secretly a deep-state operative'), that's fine — it's satire. "
+            "But if the drop says something like 'Taylor Swift released Midnights "
+            "in 2023' (it was 2022), or gets a CEO's name wrong, or cites a "
+            "real statistic incorrectly — flag it.\n\n"
+            "SEVERITY GUIDE:\n"
+            "- none: no factual errors found.\n"
+            "- minor: small errors (wrong year, wrong name, wrong stat) that can "
+            "be swapped out without breaking the conspiracy's logic. Provide "
+            "corrected_body with just those facts fixed — same tone, structure, "
+            "formatting, length.\n"
+            "- major: the conspiracy's core thread DEPENDS on the wrong fact "
+            "(e.g. the whole theory hinges on two events sharing a date but they "
+            "don't, or a key 'connection' references a product/song/event that "
+            "doesn't exist). Fixing the fact would make the conspiracy incoherent. "
+            "Set corrected_body to empty string — the caller will regenerate from "
+            "scratch.\n\n"
+            "Call emit_fact_check with the verdict."
+        ),
+        tools=FACT_CHECK_TOOLS,
+        tool_choice={"type": "tool", "name": "emit_fact_check"},
+        messages=[{
+            "role": "user",
+            "content": (
+                f"TOPIC A: {thing_a}\n"
+                f"TOPIC B: {thing_b}\n\n"
+                f"DROP BODY TO FACT-CHECK:\n{body}"
+            ),
+        }],
     )
     for block in msg.content:
         if getattr(block, "type", None) == "tool_use":
-            out = dict(block.input or {})
-            out["refused"] = bool(out.get("refused", block.name == "emit_refusal"))
-            if isinstance(out.get("body"), str):
-                out["body"] = _sanitize_body(out["body"])
-            return out
-    return {
-        "refused": True,
-        "reason": "the oracle went silent — try again.",
-    }
+            return dict(block.input or {})
+    return {"passed": True, "severity": "none", "issues": [], "corrected_body": body}
 
 
 def rate_conspiracy(text_body: str) -> dict:

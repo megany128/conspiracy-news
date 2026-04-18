@@ -250,6 +250,97 @@ def get_journal_state() -> dict:
     }
 
 
+_FACT_CHECK_TOOLS = [{
+    "name": "emit_fact_check",
+    "description": "Return the fact-check verdict for a conspiracy drop.",
+    "input_schema": {
+        "type": "object",
+        "required": ["passed", "severity", "issues", "corrected_body"],
+        "properties": {
+            "passed": {"type": "boolean", "description": "True if all factual claims are accurate or clearly absurdist fiction."},
+            "severity": {
+                "type": "string",
+                "enum": ["none", "minor", "major"],
+                "description": (
+                    "none = no issues. "
+                    "minor = small factual errors (wrong date, wrong name) that "
+                    "can be fixed with simple swaps without changing the "
+                    "conspiracy's logic. "
+                    "major = the conspiracy's core logic depends on a wrong fact "
+                    "(e.g. the whole thread hinges on two events sharing a date but they "
+                    "don't) — a surgical fix would make the drop incoherent."
+                ),
+            },
+            "issues": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of factual inaccuracies found (empty if passed).",
+            },
+            "corrected_body": {
+                "type": "string",
+                "description": (
+                    "For severity=minor: the body with factual errors fixed, "
+                    "preserving tone/structure/length. "
+                    "For severity=major: empty string (caller will regenerate). "
+                    "For severity=none: identical to original."
+                ),
+            },
+        },
+    },
+}]
+
+
+def _fact_check_drop(client, model: str, body: str, thing_a: str, thing_b: str) -> dict:
+    """Run a second LLM pass to verify factual claims in the drop."""
+    try:
+        msg = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            system=(
+                "You are a fact-checker for satirical conspiracy theory drops. "
+                "The drops connect two real topics in absurd, fictional ways — "
+                "the CONNECTIONS are invented satire and should NOT be flagged. "
+                "Your job is to check that any stated REAL-WORLD FACTS are accurate: "
+                "dates, names, locations, statistics, event descriptions, song titles, "
+                "company details, historical events, etc. "
+                "If a claim is clearly absurdist fiction (e.g. 'Beyoncé's stylist "
+                "is secretly a deep-state operative'), that's fine — it's satire. "
+                "But if the drop says something like 'Taylor Swift released Midnights "
+                "in 2023' (it was 2022), or gets a CEO's name wrong, or cites a "
+                "real statistic incorrectly — flag it.\n\n"
+                "SEVERITY GUIDE:\n"
+                "- none: no factual errors found.\n"
+                "- minor: small errors (wrong year, wrong name, wrong stat) that can "
+                "be swapped out without breaking the conspiracy's logic. Provide "
+                "corrected_body with just those facts fixed — same tone, structure, "
+                "formatting, length.\n"
+                "- major: the conspiracy's core thread DEPENDS on the wrong fact "
+                "(e.g. the whole theory hinges on two events sharing a date but they "
+                "don't, or a key 'connection' references a product/song/event that "
+                "doesn't exist). Fixing the fact would make the conspiracy incoherent. "
+                "Set corrected_body to empty string — the caller will regenerate from "
+                "scratch.\n\n"
+                "Call emit_fact_check with the verdict."
+            ),
+            tools=_FACT_CHECK_TOOLS,
+            tool_choice={"type": "tool", "name": "emit_fact_check"},
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"TOPIC A: {thing_a}\n"
+                    f"TOPIC B: {thing_b}\n\n"
+                    f"DROP BODY TO FACT-CHECK:\n{body}"
+                ),
+            }],
+        )
+        for block in msg.content:
+            if getattr(block, "type", None) == "tool_use":
+                return dict(block.input or {})
+    except Exception:
+        pass
+    return {"passed": True, "severity": "none", "issues": [], "corrected_body": body}
+
+
 @ara.tool
 def generate_conspiracy_tool(
     thing_a: str,
@@ -473,6 +564,34 @@ input is a private individual. Do not reply in plain text."""
             out = dict(block.input or {})
             # Ensure refused is always present as a boolean.
             out["refused"] = bool(out.get("refused", block.name == "emit_refusal"))
+            # Fact-check pass: verify real-world claims are accurate.
+            if not out.get("refused") and out.get("body"):
+                fc = _fact_check_drop(client, MODEL, out["body"], thing_a, thing_b)
+                severity = fc.get("severity", "none")
+                if severity == "minor" and fc.get("corrected_body"):
+                    corrected = fc["corrected_body"]
+                    # Re-check: the correction itself might introduce new errors.
+                    fc2 = _fact_check_drop(client, MODEL, corrected, thing_a, thing_b)
+                    if fc2.get("passed") or fc2.get("severity", "none") == "none":
+                        out["body"] = corrected
+                        out["_fact_check"] = {"passed": True, "severity": "minor", "issues": fc.get("issues", []), "fixed": True}
+                    else:
+                        # Correction introduced new problems — signal regeneration.
+                        out["_fact_check"] = {
+                            "passed": False,
+                            "severity": "major",
+                            "issues": fc.get("issues", []) + fc2.get("issues", []),
+                            "needs_regeneration": True,
+                        }
+                elif severity == "major":
+                    out["_fact_check"] = {
+                        "passed": False,
+                        "severity": "major",
+                        "issues": fc.get("issues", []),
+                        "needs_regeneration": True,
+                    }
+                else:
+                    out["_fact_check"] = {"passed": True, "severity": "none", "issues": []}
             return out
     # No tool_use block — treat as a soft refusal so the workflow stops.
     return {
@@ -860,9 +979,18 @@ WORKFLOW:
    `context_b`.
 7. Call `generate_conspiracy_tool(thing_a, thing_b, context_a, context_b,
    interests=<aggregated interests>)`. Passing interests tells the generator
-   to weave teaching context about thing_b into the body. If it returns
-   refused=true, go back to step 4/5 and pick a different pair (max 3
-   retries). If still refused, stop silently.
+   to weave teaching context about thing_b into the body. The tool runs an
+   automatic fact-check pass. Check the `_fact_check` field in the response:
+   - If `_fact_check.severity` is "none" or missing → proceed to step 8.
+   - If `_fact_check.severity` is "minor" → the body has already been
+     patched with corrected facts. Proceed to step 8.
+   - If `_fact_check.needs_regeneration` is true → the conspiracy's logic
+     depended on a wrong fact and can't be surgically fixed. Call
+     `generate_conspiracy_tool` again with the SAME pair (max 1 retry).
+     If the retry also needs regeneration, pick a different pair (back to
+     step 4/5).
+   If it returns refused=true, go back to step 4/5 and pick a different
+   pair (max 3 retries). If still refused, stop silently.
 8. Call `record_drop(...)` with the full drop + the two source items
    (each {source, id, title, url}).
 9. Call `format_drop_for_sms(drop_json=<record_drop's JSON return>)`, then
