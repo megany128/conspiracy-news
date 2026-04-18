@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CONSPIRACYYY — a 24/7 conspiracy wire service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Anton&family=Redacted+Script:wght@400;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0d0a08;
+    --paper:#f1e3c4;
+    --paper-shadow:#d9c69a;
+    --ink:#1a1108;
+    --red:#c9162a;
+    --red-bright:#ff2a3d;
+    --red-thread:#b31325;
+    --stamp:#961221;
+    --manila:#d9b775;
+    --mute:#8a7b62;
+    --cream:#ecd9ae;
+    --terminal:#1a1108;
+    --terminal-head:#2a1a09;
+    --terminal-border:#f3dfab;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--cream);font-family:'IBM Plex Mono',monospace;min-height:100vh;overflow-x:hidden}
+  body{
+    background:
+      radial-gradient(ellipse 800px 500px at 0% 0%, rgba(201,22,42,.10), transparent 60%),
+      radial-gradient(ellipse 800px 500px at 100% 0%, rgba(201,22,42,.08), transparent 60%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 2px, transparent 2px 14px),
+      var(--bg);
+    position:relative;
+  }
+  /* film grain overlay */
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    mix-blend-mode:overlay;opacity:.35;
+  }
+  /* red strings */
+  .strings{position:fixed;inset:0;pointer-events:none;z-index:0;width:100%;height:100%}
+  .strings line{stroke:var(--red-thread);stroke-width:1.2;opacity:.55;filter:drop-shadow(0 0 4px rgba(179,19,37,.8))}
+
+  .wrap{position:relative;z-index:3;max-width:1040px;margin:0 auto;padding:48px 24px 80px}
+
+  /* HERO */
+  .brand{
+    font-family:'Anton',sans-serif;
+    font-size:clamp(56px,11vw,140px);
+    line-height:.92;letter-spacing:.01em;
+    color:var(--cream);
+    transform:rotate(-0.8deg);
+    text-shadow:2px 2px 0 #000, 6px 6px 0 rgba(201,22,42,.45);
+    margin-bottom:18px;
+  }
+  .brand .dot{color:var(--red-bright);text-shadow:2px 2px 0 #000, 0 0 18px rgba(255,42,61,.9)}
+  .tagline{
+    font-family:'Special Elite',monospace;
+    font-size:17px;line-height:1.55;
+    color:#d8c59a;max-width:720px;
+    margin-bottom:36px;
+  }
+  .tagline b{color:var(--red-bright)}
+
+  /* PAPER CARD */
+  .paper{
+    position:relative;
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:3px;
+    box-shadow:0 16px 24px -14px rgba(0,0,0,.7);
+    padding:34px 30px 28px;
+    transform:rotate(-0.4deg);
+  }
+  .paper.rot2{transform:rotate(0.5deg)}
+  .paper::before{
+    content:"";
+    position:absolute;
+    top:-14px;left:50%;transform:translateX(-50%) rotate(-1.6deg);
+    width:160px;height:28px;
+    background:rgba(255,240,168,.75);
+    box-shadow:0 2px 6px rgba(0,0,0,.25);
+  }
+
+  /* CTA */
+  .cta-wrap{margin-bottom:56px}
+  .cta{
+    max-width:780px;
+    padding:44px 40px 34px;
+  }
+  .cta .stamp{
+    position:absolute;top:20px;right:18px;
+  }
+  .cta .hotline-label{
+    font-family:'Special Elite',monospace;
+    font-size:13px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--stamp);
+    margin-bottom:8px;
+  }
+  .hotline-row{
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+  .hotline-num{
+    font-family:'Anton',sans-serif;
+    font-size:clamp(52px,10vw,96px);
+    color:#7a0d18;
+    letter-spacing:.01em;
+    line-height:1;
+    text-shadow:2px 2px 0 rgba(0,0,0,.12);
+  }
+  .copy-btn{
+    font-family:'Anton',sans-serif;text-transform:uppercase;
+    letter-spacing:.06em;font-size:14px;
+    background:var(--red);color:#fff;
+    border:2px solid #000;border-style:inset;
+    padding:10px 14px;cursor:pointer;
+    box-shadow:4px 4px 0 #000;
+    transition:transform .08s, box-shadow .08s;
+  }
+  .copy-btn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 #000}
+  .cta-instr{
+    font-family:'Special Elite',monospace;
+    font-size:15px;line-height:1.7;color:var(--ink);
+  }
+  .cta-instr b{color:var(--stamp)}
+  .active-chip{
+    display:inline-block;margin-top:16px;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    padding:6px 10px;
+    background:rgba(150,18,33,.12);
+    border:1px dashed var(--stamp);
+    color:var(--stamp);letter-spacing:.08em;text-transform:uppercase;
+  }
+
+  .stamp{
+    font-family:'Anton',sans-serif;text-transform:uppercase;
+    color:var(--stamp);border:2px solid var(--stamp);
+    padding:6px 10px;transform:rotate(9deg);
+    opacity:.82;font-size:14px;letter-spacing:.08em;
+    background:rgba(241,227,196,.2);
+  }
+
+  /* TERMINAL WIRE */
+  .wire{
+    background:var(--terminal);
+    border:2px solid var(--terminal-border);
+    border-radius:8px;
+    overflow:hidden;
+    margin-bottom:64px;
+    box-shadow:0 20px 40px -20px rgba(0,0,0,.9), inset 0 0 60px rgba(201,22,42,.05);
+  }
+  .wire-head{
+    background:var(--terminal-head);
+    height:44px;
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    align-items:center;
+    padding:0 14px;
+    border-bottom:1px solid #3a2711;
+  }
+  .dots{display:flex;gap:8px}
+  .dots span{
+    width:12px;height:12px;border-radius:50%;
+    display:inline-block;
+  }
+  .dots .d1{background:#7a2a2a}
+  .dots .d2{background:#8a7326}
+  .dots .d3{background:#2f6a2a}
+  .wire-counter{
+    font-family:'Anton',sans-serif;font-size:13px;
+    letter-spacing:.12em;color:#c9a86a;
+    text-align:center;
+  }
+  .wire-counter b{color:var(--red-bright)}
+  .wire-label{
+    font-family:'Anton',sans-serif;font-size:14px;
+    letter-spacing:.14em;color:var(--terminal-border);
+    text-align:right;
+    display:flex;align-items:center;gap:10px;justify-content:flex-end;
+  }
+  .pulse-dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--red-bright);
+    animation:pulse 1s infinite ease-in-out;
+    box-shadow:0 0 10px rgba(255,42,61,.8);
+  }
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+  .wire-body{
+    max-height:620px;overflow-y:auto;
+    padding:18px 18px 10px;
+    scrollbar-width:thin;
+    scrollbar-color:#5a3a1a var(--terminal);
+  }
+  .wire-body::-webkit-scrollbar{width:8px}
+  .wire-body::-webkit-scrollbar-thumb{background:#5a3a1a;border-radius:4px}
+
+  .drop{
+    position:relative;
+    padding:14px 16px 16px 18px;
+    margin-bottom:14px;
+    background:rgba(255,255,255,.02);
+    border-left:3px solid var(--red);
+    border-radius:0 4px 4px 0;
+    transition:background .3s;
+    cursor:pointer;
+  }
+  .drop.just-arrived{
+    animation:arrived 2s ease-out;
+  }
+  @keyframes arrived{
+    0%{border-left-color:#ff2a3d;box-shadow:-4px 0 20px rgba(255,42,61,.6), 0 0 0 rgba(0,0,0,0)}
+    100%{border-left-color:var(--red);box-shadow:none}
+  }
+  .drop .ts{
+    font-family:'Redacted Script',cursive;
+    color:var(--red);font-size:15px;letter-spacing:.03em;
+    margin-bottom:6px;
+  }
+  .drop .ts .hhmm{
+    font-family:'Special Elite',monospace;
+    color:var(--cream);margin-left:6px;
+    font-weight:700;
+  }
+  .sources{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+  .src{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    color:var(--cream);opacity:.85;
+    text-decoration:none;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    max-width:100%;
+  }
+  .src:hover{text-decoration:underline;opacity:1}
+  .src b{color:#c9a86a;margin-right:6px;font-weight:500}
+  .drop-title{
+    font-family:'Anton',sans-serif;
+    color:var(--red-bright);
+    font-size:22px;line-height:1.15;
+    letter-spacing:.02em;
+    margin:6px 0 8px;
+  }
+  .drop-body{
+    font-family:'IBM Plex Mono',monospace;
+    color:#d5b988;font-size:13px;line-height:1.55;
+  }
+  .unfold{
+    display:inline-block;margin-top:6px;
+    color:var(--red-bright);font-size:12px;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.05em;
+  }
+  .drop.expanded .preview-cap{display:none}
+  .drop.expanded .full{display:block}
+  .full{display:none;margin-top:10px}
+  .loop-back{
+    margin-top:10px;padding:10px 12px;
+    background:rgba(0,0,0,.35);
+    border-left:3px solid var(--red-bright);
+    font-family:'Special Elite',monospace;
+    font-size:13px;color:#e6cf8f;line-height:1.5;
+  }
+  .loop-back b{color:var(--red-bright);font-family:'Anton',sans-serif;letter-spacing:.1em}
+
+  .score{
+    display:flex;align-items:center;gap:8px;margin-top:10px;
+  }
+  .score-label{
+    font-family:'Anton',sans-serif;font-size:11px;
+    color:#c9a86a;letter-spacing:.12em;
+  }
+  .pips{display:flex;gap:3px}
+  .pip{
+    width:10px;height:14px;
+    border:1px solid var(--cream);
+    background:transparent;
+  }
+  .pip.on{background:var(--red);border-color:var(--red)}
+
+  .wire-foot{
+    padding:10px 16px;
+    background:var(--terminal-head);
+    border-top:1px solid #3a2711;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;color:#c9a86a;letter-spacing:.08em;
+    display:flex;align-items:center;gap:8px;
+  }
+  .wire-foot .mini-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--red-bright);
+    animation:pulse 1.4s infinite ease-in-out;
+  }
+  .wire-foot.offline{color:#8a7b62}
+  .wire-foot.offline .mini-dot{background:#5a4a2a;animation:none;box-shadow:none}
+
+  .empty-drop{
+    text-align:center;
+    padding:30px 20px;
+    color:#c9a86a;
+    font-family:'Special Elite',monospace;
+    font-size:14px;letter-spacing:.04em;
+    border-left:3px dashed #5a3a1a;
+    background:transparent;
+  }
+  .empty-drop b{color:var(--red-bright)}
+
+  /* ON-DEMAND SECTION */
+  .divider{
+    font-family:'Special Elite',monospace;
+    color:#b8a378;font-size:18px;text-align:center;
+    margin:10px 0 30px;letter-spacing:.05em;
+  }
+  .inputs{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:20px;align-items:center;
+    margin-bottom:26px;
+  }
+  .input-card{
+    padding:22px 20px;
+  }
+  .input-card label{
+    display:block;
+    font-family:'Special Elite',monospace;
+    text-transform:uppercase;letter-spacing:.12em;
+    font-size:12px;color:var(--stamp);
+    margin-bottom:8px;
+  }
+  .input-card input{
+    width:100%;
+    background:transparent;border:none;border-bottom:2px dashed var(--ink);
+    font-family:'Special Elite',monospace;
+    font-size:18px;color:var(--ink);
+    padding:6px 0;outline:none;
+  }
+  .plus{
+    font-family:'Anton',sans-serif;font-size:54px;
+    color:var(--red);transform:rotate(-8deg);
+    text-align:center;text-shadow:2px 2px 0 #000;
+  }
+
+  .btn-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:34px}
+  .btn{
+    font-family:'Anton',sans-serif;text-transform:uppercase;
+    letter-spacing:.06em;font-size:16px;
+    background:var(--red);color:#fff;
+    border:2px inset #000;
+    padding:14px 20px;cursor:pointer;
+    box-shadow:4px 4px 0 #000;
+    transition:transform .08s, box-shadow .08s;
+  }
+  .btn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 #000}
+  .btn.ghost{
+    background:transparent;color:var(--cream);
+    border:2px solid var(--cream);
+    box-shadow:4px 4px 0 rgba(255,255,255,.15);
+  }
+  .btn.ghost:active{box-shadow:1px 1px 0 rgba(255,255,255,.15)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+
+  /* FOLDER OUTPUT */
+  .folder{
+    display:none;
+    background:var(--manila);
+    color:var(--ink);
+    padding:30px 28px;
+    border-radius:2px;
+    position:relative;
+    box-shadow:0 20px 30px -16px rgba(0,0,0,.7);
+    transform:rotate(0.3deg);
+    margin-bottom:26px;
+  }
+  .folder.show{display:block}
+  .folder::before{
+    content:"";position:absolute;top:-12px;left:40px;
+    width:130px;height:24px;
+    background:rgba(255,240,168,.8);
+    transform:rotate(-2deg);
+    box-shadow:0 2px 6px rgba(0,0,0,.25);
+  }
+  .folder .stamp{position:absolute;top:16px;right:14px}
+  .folder h3{
+    font-family:'Anton',sans-serif;
+    color:var(--stamp);font-size:30px;line-height:1.1;
+    margin-bottom:14px;max-width:80%;
+  }
+  .ev{
+    border-left:3px solid var(--red);
+    padding:8px 14px;margin:12px 0;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:14px;line-height:1.55;
+    background:rgba(0,0,0,.04);
+  }
+  .folder .loop-panel{
+    background:#2a1a09;color:var(--cream);
+    border-left:4px solid var(--red-bright);
+    padding:14px 18px;margin-top:18px;
+    font-family:'Special Elite',monospace;font-size:14px;line-height:1.6;
+  }
+  .folder .loop-panel b{color:var(--red-bright);font-family:'Anton',sans-serif;letter-spacing:.1em}
+  .meter{margin:14px 0 4px}
+  .folder .score-label{color:var(--stamp)}
+  .folder .pip{border-color:var(--ink)}
+  .disclaim{
+    margin-top:18px;font-family:'Special Elite',monospace;
+    font-size:12px;color:var(--mute);line-height:1.5;
+  }
+
+  .folder-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+  .folder-btns .btn{font-size:13px;padding:10px 14px;box-shadow:3px 3px 0 #000}
+  .folder-btns .btn.ghost{color:var(--ink);border-color:var(--ink);box-shadow:3px 3px 0 rgba(0,0,0,.2)}
+
+  .send-row{
+    display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;
+    padding-top:18px;border-top:1px dashed rgba(0,0,0,.25);
+  }
+  .send-row input{
+    flex:1;min-width:180px;
+    background:transparent;border:none;border-bottom:2px dashed var(--ink);
+    font-family:'Special Elite',monospace;font-size:16px;
+    color:var(--ink);padding:6px 4px;outline:none;
+  }
+  .status{
+    margin-top:10px;font-family:'IBM Plex Mono',monospace;
+    font-size:13px;min-height:18px;
+  }
+  .status.ok{color:#4a7a2a}
+  .status.err{color:var(--stamp)}
+
+  /* SCREENSHOT MODE */
+  body.shot .strings,body.shot .grain{display:none}
+  body.shot .wrap > *:not(.folder){display:none}
+  body.shot .folder{transform:rotate(0deg);margin:40px auto;max-width:680px}
+
+  /* FOOTER */
+  footer{
+    margin-top:40px;padding-top:24px;
+    border-top:1px dashed #3a2711;
+    font-family:'Special Elite',monospace;
+    color:#7c6b4a;font-size:13px;line-height:1.8;
+  }
+  footer .pill{
+    display:inline-block;
+    padding:4px 10px;
+    border:1px solid #5a4a2a;
+    border-radius:999px;
+    margin:4px 0;
+    color:#b8a378;
+  }
+
+  /* MOBILE */
+  @media (max-width:640px){
+    .wrap{padding:32px 16px 60px}
+    .inputs{grid-template-columns:1fr;gap:10px}
+    .plus{transform:rotate(0deg);font-size:40px}
+    .hotline-num{font-size:clamp(42px,12vw,72px)}
+    .cta{padding:36px 22px 26px}
+    .btn-row .btn{width:100%}
+    .wire-head{grid-template-columns:auto 1fr auto;gap:8px}
+    .wire-counter{font-size:11px;letter-spacing:.05em}
+    .wire-label{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<!-- Grain overlay -->
+<svg class="grain" xmlns="http://www.w3.org/2000/svg">
+  <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter>
+  <rect width="100%" height="100%" filter="url(#n)"/>
+</svg>
+
+<!-- Red strings -->
+<svg class="strings" preserveAspectRatio="none" viewBox="0 0 100 100">
+  <line x1="0" y1="8" x2="100" y2="72"/>
+  <line x1="100" y1="4" x2="0" y2="88"/>
+  <line x1="10" y1="100" x2="80" y2="0"/>
+  <line x1="0" y1="50" x2="100" y2="30"/>
+  <line x1="30" y1="0" x2="70" y2="100"/>
+</svg>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <h1 class="brand">CONSPIRAC<span>Y</span><span>Y</span><span class="dot">Y</span> <span style="color:var(--red-bright)">🔴</span></h1>
+  <p class="tagline">a 24/7 conspiracy wire service. every 2 hours, our agent scans real news, picks two unrelated stories, and texts you the unhinged red-string theory connecting them. <b>100% satirical.</b></p>
+
+  <!-- CTA -->
+  <div class="cta-wrap">
+    <div class="paper cta" data-hotline="+15554730000" id="ctaCard">
+      <div class="stamp">HOTLINE</div>
+      <div class="hotline-label">→ the conspiracy hotline</div>
+      <div class="hotline-row">
+        <div class="hotline-num" id="hotlineNum">+1 (555) 473-0000</div>
+        <button class="copy-btn" id="copyBtn" type="button">📋 TAP TO COPY</button>
+      </div>
+      <div class="cta-instr">
+        text <b>SUBSCRIBE</b> to this number to get drops every 2 hours.<br/>
+        text <b>MORE</b> for a fresh one on demand.<br/>
+        text <b>STOP</b> to unsubscribe. text <b>LAST</b> for the most recent drop.
+      </div>
+      <div class="active-chip" id="activeChip" style="display:none">CURRENTLY ACTIVE · <span id="subCount">0</span> subscribers</div>
+    </div>
+  </div>
+
+  <!-- LIVE WIRE FEED -->
+  <div class="wire" id="wire">
+    <div class="wire-head">
+      <div class="dots"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
+      <div class="wire-counter">DROPS TODAY: <b id="dropsToday">0</b></div>
+      <div class="wire-label"><span>CONSPIRACYYY-WIRE :: LIVE</span><span class="pulse-dot"></span></div>
+    </div>
+    <div class="wire-body" id="wireBody">
+      <!-- drops injected here -->
+    </div>
+    <div class="wire-foot" id="wireFoot">
+      <span class="mini-dot"></span><span id="wireStatus">● LISTENING…</span>
+    </div>
+  </div>
+
+  <!-- ON-DEMAND -->
+  <div class="divider">or generate one on demand →</div>
+  <div class="inputs">
+    <div class="paper input-card">
+      <label>Subject A</label>
+      <input type="text" id="thingA" placeholder="e.g. the price of eggs" autocomplete="off"/>
+    </div>
+    <div class="plus">+</div>
+    <div class="paper rot2 input-card">
+      <label>Subject B</label>
+      <input type="text" id="thingB" placeholder="e.g. the moon" autocomplete="off"/>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn" id="genBtn" type="button">🔴 ESTABLISH CONNECTION</button>
+    <button class="btn ghost" id="randBtn" type="button">🎲 RANDOM CONSPIRACY</button>
+  </div>
+
+  <!-- FOLDER OUTPUT -->
+  <div class="folder" id="folder">
+    <div class="stamp">CLASSIFIED NONSENSE</div>
+    <h3 id="outTitle">—</h3>
+    <div id="outBody"></div>
+    <div class="meter">
+      <div class="score">
+        <span class="score-label">RED STRING SCORE</span>
+        <div class="pips" id="outPips"></div>
+      </div>
+    </div>
+    <div class="loop-panel" id="outLoop" style="display:none"><b>LOOP-BACK →</b> <span id="outLoopText"></span></div>
+    <div class="disclaim" id="outDisclaim"></div>
+    <div class="folder-btns">
+      <button class="btn" id="deeperBtn" type="button">🕳️ GO DEEPER</button>
+      <button class="btn ghost" id="copyBtn2" type="button">📋 COPY AS TEXT</button>
+      <button class="btn ghost" id="shotBtn" type="button">📸 SCREENSHOT MODE</button>
+    </div>
+    <div class="send-row">
+      <input type="tel" id="phone" placeholder="+1 555 555 0123" autocomplete="off"/>
+      <button class="btn" id="sendBtn" type="button">📲 TEXT VIA iMESSAGE</button>
+    </div>
+    <div class="status" id="sendStatus"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div>built for the ara hackathon · virality track · social + creative</div>
+    <div><span class="pill">sources say: this site is chronically online 🧵</span></div>
+    <div>running 24/7 on Ara · last drop: <span id="lastDrop">—</span></div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // --- COPY HOTLINE ---
+  const copyBtn = document.getElementById('copyBtn');
+  const ctaCard = document.getElementById('ctaCard');
+  copyBtn.addEventListener('click', async () => {
+    const num = ctaCard.dataset.hotline || '';
+    try {
+      await navigator.clipboard.writeText(num);
+    } catch(e){
+      const tmp = document.createElement('input');
+      tmp.value = num; document.body.appendChild(tmp); tmp.select();
+      try { document.execCommand('copy'); } catch(_){}
+      document.body.removeChild(tmp);
+    }
+    const prev = copyBtn.textContent;
+    copyBtn.textContent = 'COPIED ✓';
+    setTimeout(() => { copyBtn.textContent = prev; }, 1200);
+  });
+
+  // --- STATS (optional) ---
+  (async () => {
+    try {
+      const r = await fetch('/api/stats');
+      if (!r.ok) return;
+      const s = await r.json();
+      if (s && typeof s.subscriber_count === 'number') {
+        document.getElementById('activeChip').style.display = 'inline-block';
+        document.getElementById('subCount').textContent = s.subscriber_count.toLocaleString();
+      }
+      if (s && typeof s.today_count === 'number') {
+        document.getElementById('dropsToday').textContent = s.today_count;
+      }
+    } catch(e){}
+  })();
+
+  // --- WIRE FEED ---
+  const wireBody = document.getElementById('wireBody');
+  const wireStatus = document.getElementById('wireStatus');
+  const wireFoot = document.getElementById('wireFoot');
+  const dropsTodayEl = document.getElementById('dropsToday');
+  const lastDropEl = document.getElementById('lastDrop');
+
+  const MAX_DROPS = 15;
+  let pollInterval = 8000;
+  let failCount = 0;
+  let timer = null;
+  let currentController = null;
+  const seenIds = new Set();
+  let lastDropTs = null;
+
+  function pipsHtml(score){
+    const s = Math.max(0, Math.min(10, score|0));
+    let h = '';
+    for (let i=0;i<10;i++) h += `<span class="pip${i<s?' on':''}"></span>`;
+    return h;
+  }
+
+  function escapeHtml(s){
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function fmtTime(ts){
+    try {
+      const d = new Date(ts);
+      if (isNaN(d)) return '--:--';
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      return `${hh}:${mm} EST`;
+    } catch(e){ return '--:--'; }
+  }
+
+  function relTime(ts){
+    if (!ts) return '—';
+    const d = new Date(ts);
+    if (isNaN(d)) return '—';
+    const diff = Date.now() - d.getTime();
+    const m = Math.floor(diff/60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    const h = Math.floor(m/60);
+    if (h < 24) return h + 'h ago';
+    return Math.floor(h/24) + 'd ago';
+  }
+
+  function minutesToNextSlot(){
+    // next 0 */2 * * * (even hours, :00)
+    const now = new Date();
+    const next = new Date(now);
+    next.setSeconds(0,0);
+    next.setMinutes(0);
+    let h = now.getHours();
+    // advance to next even hour strictly in the future
+    if (h % 2 === 0 && now.getMinutes() === 0 && now.getSeconds() === 0) {
+      h += 2;
+    } else if (h % 2 === 0) {
+      h += 2;
+    } else {
+      h += 1;
+    }
+    next.setHours(h);
+    const diff = next.getTime() - now.getTime();
+    return Math.max(1, Math.ceil(diff/60000));
+  }
+
+  function renderEmptyState(){
+    wireBody.innerHTML = `<div class="empty-drop">[<b>WIRE SILENT</b>] — waiting for next scan. next drop in: <b>${minutesToNextSlot()}m</b>.</div>`;
+  }
+
+  function typewriter(el, text){
+    if (prefersReduced) { el.textContent = text; return; }
+    el.textContent = '';
+    let i = 0;
+    const tick = () => {
+      if (i <= text.length) {
+        el.textContent = text.slice(0, i);
+        i++;
+        setTimeout(tick, 24);
+      }
+    };
+    tick();
+  }
+
+  function buildDrop(d){
+    const wrap = document.createElement('div');
+    wrap.className = 'drop just-arrived';
+    wrap.dataset.id = d.id;
+
+    const preview = (d.body || '').slice(0, 180);
+    const needsUnfold = (d.body || '').length > 180;
+
+    const srcA = d.source_a || {};
+    const srcB = d.source_b || {};
+
+    wrap.innerHTML = `
+      <div class="ts">[██-██-████ • <span class="hhmm">${escapeHtml(fmtTime(d.ts))}</span>]</div>
+      <div class="sources">
+        ${srcA.url ? `<a class="src" href="${escapeHtml(srcA.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcA.name||'HN')} ▸</b>${escapeHtml(srcA.title||'')}</a>` : ''}
+        ${srcB.url ? `<a class="src" href="${escapeHtml(srcB.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcB.name||'RDT')} ▸</b>${escapeHtml(srcB.title||'')}</a>` : ''}
+      </div>
+      <div class="drop-title"><span class="tw"></span></div>
+      <div class="drop-body">
+        <span class="preview-cap">${escapeHtml(preview)}${needsUnfold?'…':''}</span>
+        <span class="full">${escapeHtml(d.body || '')}</span>
+        ${needsUnfold ? '<div class="unfold">▸ tap to unfold</div>' : ''}
+        ${d.loop_back ? `<div class="loop-back"><b>LOOP-BACK →</b> ${escapeHtml(d.loop_back)}</div>` : ''}
+      </div>
+      <div class="score">
+        <span class="score-label">RED STRING SCORE</span>
+        <div class="pips">${pipsHtml(d.red_string_score||0)}</div>
+      </div>
+    `;
+
+    const tw = wrap.querySelector('.tw');
+    typewriter(tw, d.title || '(untitled)');
+
+    wrap.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') return;
+      wrap.classList.toggle('expanded');
+    });
+
+    setTimeout(() => wrap.classList.remove('just-arrived'), 2000);
+    return wrap;
+  }
+
+  function insertDrop(d){
+    // remove empty state if present
+    const empty = wireBody.querySelector('.empty-drop');
+    if (empty) empty.remove();
+
+    const el = buildDrop(d);
+    const nearTop = wireBody.scrollTop < 100;
+    wireBody.insertBefore(el, wireBody.firstChild);
+
+    // trim
+    const drops = wireBody.querySelectorAll('.drop');
+    if (drops.length > MAX_DROPS) {
+      for (let i = MAX_DROPS; i < drops.length; i++) {
+        drops[i].style.transition = 'opacity .6s';
+        drops[i].style.opacity = '0';
+        setTimeout(((n) => () => n.remove())(drops[i]), 600);
+      }
+    }
+
+    if (nearTop) {
+      wireBody.scrollTop = 0;
+    }
+  }
+
+  function setStatus(online){
+    if (online){
+      wireFoot.classList.remove('offline');
+      wireStatus.textContent = '● LISTENING…';
+    } else {
+      wireFoot.classList.add('offline');
+      wireStatus.textContent = '○ OFFLINE';
+    }
+  }
+
+  async function pollWire(){
+    if (document.hidden) return;
+    if (currentController) currentController.abort();
+    currentController = new AbortController();
+    try {
+      const r = await fetch('/api/wire', {signal: currentController.signal});
+      if (!r.ok) throw new Error('bad status');
+      const data = await r.json();
+      failCount = 0;
+      setStatus(true);
+      if (pollInterval !== 8000) {
+        pollInterval = 8000;
+        restartTimer();
+      }
+
+      if (data && data.stats){
+        if (typeof data.stats.today_count === 'number') dropsTodayEl.textContent = data.stats.today_count;
+        if (typeof data.stats.subscriber_count === 'number') {
+          document.getElementById('activeChip').style.display = 'inline-block';
+          document.getElementById('subCount').textContent = data.stats.subscriber_count.toLocaleString();
+        }
+      }
+
+      const drops = (data && Array.isArray(data.drops)) ? data.drops : [];
+      // drops are expected newest-first; we insert in reverse so newest ends up on top
+      const fresh = drops.filter(d => d && d.id != null && !seenIds.has(d.id));
+      // Insert oldest-of-fresh first so newest ends up at top
+      for (let i = fresh.length - 1; i >= 0; i--) {
+        seenIds.add(fresh[i].id);
+        insertDrop(fresh[i]);
+        if (!lastDropTs || new Date(fresh[i].ts) > new Date(lastDropTs)) {
+          lastDropTs = fresh[i].ts;
+        }
+      }
+      if (lastDropTs) lastDropEl.textContent = relTime(lastDropTs);
+
+      if (!wireBody.querySelector('.drop') && !wireBody.querySelector('.empty-drop')) {
+        renderEmptyState();
+      }
+    } catch(e){
+      if (e.name === 'AbortError') return;
+      failCount++;
+      if (failCount >= 2){
+        setStatus(false);
+        if (pollInterval !== 20000){
+          pollInterval = 20000;
+          restartTimer();
+        }
+      }
+    }
+  }
+
+  function restartTimer(){
+    if (timer) clearInterval(timer);
+    timer = setInterval(pollWire, pollInterval);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden){
+      if (currentController) currentController.abort();
+      if (timer) { clearInterval(timer); timer = null; }
+    } else {
+      pollWire();
+      restartTimer();
+    }
+  });
+
+  // kick off
+  renderEmptyState();
+  pollWire();
+  restartTimer();
+
+  // refresh relative time periodically
+  setInterval(() => { if (lastDropTs) lastDropEl.textContent = relTime(lastDropTs); }, 30000);
+
+  // refresh empty-state countdown
+  setInterval(() => {
+    const empty = wireBody.querySelector('.empty-drop');
+    if (empty) renderEmptyState();
+  }, 60000);
+
+  // --- ONE-SHOT (v1 flow preserved) ---
+  const thingA = document.getElementById('thingA');
+  const thingB = document.getElementById('thingB');
+  const genBtn = document.getElementById('genBtn');
+  const randBtn = document.getElementById('randBtn');
+  const folder = document.getElementById('folder');
+  const outTitle = document.getElementById('outTitle');
+  const outBody = document.getElementById('outBody');
+  const outPips = document.getElementById('outPips');
+  const outLoop = document.getElementById('outLoop');
+  const outLoopText = document.getElementById('outLoopText');
+  const outDisclaim = document.getElementById('outDisclaim');
+  const deeperBtn = document.getElementById('deeperBtn');
+  const copyBtn2 = document.getElementById('copyBtn2');
+  const shotBtn = document.getElementById('shotBtn');
+  const phoneInput = document.getElementById('phone');
+  const sendBtn = document.getElementById('sendBtn');
+  const sendStatus = document.getElementById('sendStatus');
+
+  let currentResult = null;
+  let currentPair = {a:'', b:''};
+
+  function renderResult(res, pair){
+    currentResult = res;
+    if (pair) currentPair = pair;
+    folder.classList.add('show');
+    if (res.refused){
+      outTitle.textContent = 'CASE REJECTED';
+      outBody.innerHTML = `<div class="ev">${escapeHtml(res.body || 'the agency has declined this inquiry.')}</div>`;
+      outPips.innerHTML = pipsHtml(0);
+      outLoop.style.display = 'none';
+      outDisclaim.textContent = res.disclaimer || '';
+      return;
+    }
+    outTitle.textContent = res.title || '(untitled)';
+    // body may include paragraphs; split on blank lines
+    const chunks = (res.body || '').split(/\n\s*\n/).filter(Boolean);
+    outBody.innerHTML = chunks.map(c => `<div class="ev">${escapeHtml(c)}</div>`).join('');
+    outPips.innerHTML = pipsHtml(res.red_string_score || 0);
+    if (res.loop_back){
+      outLoop.style.display = 'block';
+      outLoopText.textContent = res.loop_back;
+    } else {
+      outLoop.style.display = 'none';
+    }
+    outDisclaim.textContent = res.disclaimer || '100% satirical. no actual connection is implied.';
+    folder.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  async function generate(){
+    const a = thingA.value.trim();
+    const b = thingB.value.trim();
+    if (!a || !b){
+      sendStatus.textContent = 'need two subjects to connect.';
+      sendStatus.className = 'status err';
+      return;
+    }
+    genBtn.disabled = true;
+    genBtn.textContent = 'CONNECTING…';
+    try {
+      const r = await fetch('/api/conspiracy', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({thing_a:a, thing_b:b})
+      });
+      const data = await r.json();
+      renderResult(data, {a, b});
+    } catch(e){
+      sendStatus.textContent = 'wire cut. try again.';
+      sendStatus.className = 'status err';
+    } finally {
+      genBtn.disabled = false;
+      genBtn.textContent = '🔴 ESTABLISH CONNECTION';
+    }
+  }
+
+  async function randomConspiracy(){
+    randBtn.disabled = true;
+    randBtn.textContent = 'ROLLING…';
+    try {
+      const r = await fetch('/api/random', {method:'POST'});
+      const data = await r.json();
+      if (data._pair){
+        thingA.value = data._pair.thing_a || '';
+        thingB.value = data._pair.thing_b || '';
+      }
+      renderResult(data, {a: thingA.value, b: thingB.value});
+    } catch(e){
+      sendStatus.textContent = 'dice rolled off the table.';
+      sendStatus.className = 'status err';
+    } finally {
+      randBtn.disabled = false;
+      randBtn.textContent = '🎲 RANDOM CONSPIRACY';
+    }
+  }
+
+  async function goDeeper(){
+    if (!currentResult) return;
+    deeperBtn.disabled = true;
+    deeperBtn.textContent = 'DIGGING…';
+    try {
+      const r = await fetch('/api/conspiracy', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          thing_a: currentPair.a,
+          thing_b: currentPair.b,
+          deeper_context: currentResult.body || ''
+        })
+      });
+      const data = await r.json();
+      renderResult(data, currentPair);
+    } catch(e){
+      sendStatus.textContent = 'the rabbit hole collapsed.';
+      sendStatus.className = 'status err';
+    } finally {
+      deeperBtn.disabled = false;
+      deeperBtn.textContent = '🕳️ GO DEEPER';
+    }
+  }
+
+  function copyAsText(){
+    if (!currentResult) return;
+    const text = [
+      currentResult.title || '',
+      '',
+      currentResult.body || '',
+      '',
+      currentResult.loop_back ? 'LOOP-BACK → ' + currentResult.loop_back : '',
+      '',
+      currentResult.disclaimer || ''
+    ].filter(Boolean).join('\n');
+    (async () => {
+      try { await navigator.clipboard.writeText(text); } catch(_){}
+    })();
+    const prev = copyBtn2.textContent;
+    copyBtn2.textContent = 'COPIED ✓';
+    setTimeout(() => { copyBtn2.textContent = prev; }, 1200);
+  }
+
+  function toggleScreenshotMode(){
+    document.body.classList.toggle('shot');
+  }
+
+  async function sendText(){
+    if (!currentResult){
+      sendStatus.textContent = 'generate something first.';
+      sendStatus.className = 'status err';
+      return;
+    }
+    const phone = phoneInput.value.trim();
+    if (!phone){
+      sendStatus.textContent = 'need a phone number.';
+      sendStatus.className = 'status err';
+      return;
+    }
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'SENDING…';
+    sendStatus.textContent = '';
+    sendStatus.className = 'status';
+    try {
+      const r = await fetch('/api/send-imessage', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          phone,
+          title: currentResult.title || '',
+          body: currentResult.body || ''
+        })
+      });
+      const data = await r.json();
+      if (data && data.ok){
+        sendStatus.textContent = '✓ sent. check your messages.';
+        sendStatus.className = 'status ok';
+      } else {
+        sendStatus.textContent = '✗ ' + (data && data.error ? data.error : 'send failed.');
+        sendStatus.className = 'status err';
+      }
+    } catch(e){
+      sendStatus.textContent = '✗ network error.';
+      sendStatus.className = 'status err';
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = '📲 TEXT VIA iMESSAGE';
+    }
+  }
+
+  genBtn.addEventListener('click', generate);
+  randBtn.addEventListener('click', randomConspiracy);
+  deeperBtn.addEventListener('click', goDeeper);
+  copyBtn2.addEventListener('click', copyAsText);
+  shotBtn.addEventListener('click', toggleScreenshotMode);
+  sendBtn.addEventListener('click', sendText);
+
+  [thingA, thingB].forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+  });
+  phoneInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendText(); });
+
+})();
+</script>
+</body>
+</html>
