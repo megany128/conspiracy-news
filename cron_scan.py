@@ -1,7 +1,7 @@
 """
 Livewire — the 24/7 wire service (conspiracyyy-wire automation name kept for deploy compatibility).
 
-Scheduled Ara automation. Runs every 2 hours:
+Scheduled Ara automation. Runs twice a day (morning + afternoon ET):
 
   1. Fetch today's trending items from Hacker News + Reddit.
   2. Pick one unrelated pair (different domains, unused in the journal).
@@ -345,7 +345,7 @@ the headline references an event on that day). When you DO use a date, write
 it plainly. Never use ## or █ censor blocks.
 
 STRUCTURE — THIS IS AN SMS BROADCAST:
-This drop ships as an iMessage every 2 hours. Users read a lot of these.
+This drop ships as an iMessage twice a day. Users read a lot of these.
 Short and punchy.
   - TOTAL body length: 100–150 words. Absolute ceiling: 170.
   - 3–5 evidence bullets. ONE claim per bullet. 8–16 words per bullet.
@@ -524,7 +524,7 @@ def record_drop(
     now = dt.datetime.now(dt.timezone.utc)
     now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Tick lock: the cron fires every 2h, so if a drop was recorded within the
+    # Tick lock: the cron fires twice a day, so if a drop was recorded within the
     # last 30 minutes, this call is the agent looping inside a single tick.
     # Refuse silently and return the already-aired drop so the workflow stops.
     def _parse_iso(s: str):
@@ -795,7 +795,7 @@ def pick_collision_pair_tool(
 
 
 CRON_SYSTEM_PROMPT = """You are the RED STRING ORACLE running the scheduled wire service for
-LIVEWIRE. You do NOT converse with users in this role — every 2 hours
+LIVEWIRE. You do NOT converse with users in this role — twice a day
 you produce ONE drop and send it to the paired phone. Execute the workflow
 below, in order, without skipping steps.
 

@@ -1506,7 +1506,7 @@ token of the user's message, except where noted):
 
 - SUBSCRIBE / SUB / START / YES / JOIN
     → add_subscriber_tool(phone).
-    → reply: "🔴 you're IN. expect a drop every 2 hours. text MORE for one
+    → reply: "🔴 you're IN. expect a drop twice a day (morning + afternoon). text MORE for one
       now. STOP to bail. — quick one: what are you into? text `INTERESTS
       <comma list>` so every drop pairs one thing you know with one you
       don't. welcome to the corkboard 🧵"

@@ -1,7 +1,7 @@
 # Livewire 🔴
 
 A 24/7 satirical conspiracy wire service that runs in Ara's cloud.
-Every 2 hours, an agent scans real news, picks two unrelated trending
+Twice a day (morning + afternoon ET), an agent scans real news, picks two unrelated trending
 items, and airs an obviously satirical red-string theory connecting them
 via iMessage. Users don't prompt it — drops arrive unprompted, timed to
 real news.
@@ -21,7 +21,7 @@ Built for the Ara Hackathon (virality track).
                          inbound iMessage commands: SUBSCRIBE, STOP,
                          MORE, LAST, RATE, RANDOM, "X + Y", HELP
     cron_scan.py         scheduled automation (conspiracyyy-wire)
-                         runs every 2h via  ara deploy --cron "0 */2 * * *"
+                         runs 9am + 3pm ET via  ara deploy --cron "0 13,19 * * *"
     tools/
       news_sources.py    stdlib-only fetchers for HN, Reddit, NYT/BBC RSS,
                          Wikipedia "In the news" — no API keys
@@ -63,10 +63,10 @@ Deploy the reactive replyer:
 
     ara deploy app.py
 
-Deploy the scheduled wire (broadcasts every 2 hours on the top of the
-hour, UTC):
+Deploy the scheduled wire (fires twice a day — 9am and 3pm Eastern, which
+is 13:00 and 19:00 UTC):
 
-    ara deploy cron_scan.py --cron "0 */2 * * *"
+    ara deploy cron_scan.py --cron "0 13,19 * * *"
 
 You can also force a one-off drop for a demo:
 
@@ -91,7 +91,7 @@ Ara — that one's just for the visual demo).
 
 Text the paired phone number with any of:
 
-    SUBSCRIBE   → you're on the list, expect a drop every 2h
+    SUBSCRIBE   → you're on the list, expect a drop twice a day
     MORE        → fresh drop in ~20s (60s per-sender cooldown)
     LAST        → the most recent aired drop
     RATE        → red-string score of the most recent drop
