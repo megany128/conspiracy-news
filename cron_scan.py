@@ -345,7 +345,34 @@ def record_drop(
     for k, v in empty.items():
         data.setdefault(k, v)
 
-    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = dt.datetime.now(dt.timezone.utc)
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Tick lock: the cron fires every 2h, so if a drop was recorded within the
+    # last 30 minutes, this call is the agent looping inside a single tick.
+    # Refuse silently and return the already-aired drop so the workflow stops.
+    def _parse_iso(s: str):
+        if not s:
+            return None
+        try:
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            return dt.datetime.fromisoformat(s)
+        except ValueError:
+            return None
+
+    lock_cutoff = now - dt.timedelta(minutes=30)
+    for existing in reversed(data["drops"]):
+        parsed = _parse_iso(existing.get("ts", ""))
+        if parsed and parsed >= lock_cutoff:
+            return {
+                "refused": True,
+                "reason": "tick_lock: drop already aired this cron tick",
+                "existing_drop_id": existing.get("id"),
+                "existing_title": existing.get("title"),
+                "existing_ts": existing.get("ts"),
+            }
+
     ts_slug = now_iso.replace(":", "").replace("-", "").replace("T", "_")[:13]
     drop_id = f"drop_{ts_slug}_{hashlib.sha1((title + now_iso).encode()).hexdigest()[:6]}"
     drop = {
@@ -445,6 +472,19 @@ CRON_SYSTEM_PROMPT = """You are the RED STRING ORACLE running the scheduled wire
 CONSPIRACYYY. You do NOT converse with users in this role — every 2 hours
 you produce ONE drop and send it to the paired phone. Execute the workflow
 below, in order, without skipping steps.
+
+HARD RULE — ONE DROP PER RUN:
+This entire invocation produces exactly ONE `record_drop` and exactly ONE
+`linq_send_message` call. After step 8 you MUST stop calling tools. Your
+next and final output is the single-line reply described in step 10. Do
+NOT generate "bonus" drops, alternate angles, variations on the same event,
+or multi-part sends. If today's news only supports one angle, one drop is
+the correct output. More is a bug.
+
+If `record_drop` returns `{"refused": true, "reason": "tick_lock…"}`, that
+means a drop already aired this cron tick — stop immediately and reply
+`wire silent: tick_lock (already aired <existing_title>)`. Do not send
+anything.
 
 ETHICS — NON-NEGOTIABLE:
 - Only public figures / brands / places / cultural objects.
