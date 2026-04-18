@@ -1,5 +1,5 @@
 """
-Conspiracyyy — subscriber list + drop formatting for broadcast.
+Livewire — subscriber list + drop formatting for broadcast.
 
 The actual iMessage send is performed by the Ara agent's LLM calling the
 runtime-provided `linq_send_message` connector tool — this module just
@@ -177,7 +177,7 @@ SMS_MAX = 900  # comfortable iMessage-length; truncate well above the 160 SMS se
 
 def format_drop_for_sms(drop: dict[str, Any], include_cta: bool = True) -> str:
     """Build the iMessage body sent to each subscriber."""
-    title = (drop.get("title") or "CONSPIRACYYY 🔴").strip()
+    title = (drop.get("title") or "LIVEWIRE 🔴").strip()
     body = (drop.get("body") or "").strip()
     loop = (drop.get("loop_back") or "").strip()
     score = drop.get("red_string_score")
@@ -193,7 +193,7 @@ def format_drop_for_sms(drop: dict[str, Any], include_cta: bool = True) -> str:
     parts += ["", score_line.rstrip()]
     if include_cta:
         parts += ["", "reply MORE for another · LAST for the latest · STOP to unsubscribe",
-                  "🧵 conspiracyyy · 100% satirical fiction"]
+                  "🧵 livewire · 100% satirical fiction"]
     return "\n".join(p for p in parts if p is not None).strip()
 
 

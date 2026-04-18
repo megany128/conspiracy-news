@@ -1,5 +1,5 @@
 """
-Conspiracyyy — the reactive reply channel (conspiracyyy-reply).
+Livewire — the reactive reply channel (conspiracyyy-reply automation name kept for deploy compatibility).
 
 This is the automation that handles INBOUND iMessage commands. Each `@ara.tool`
 function below is SELF-CONTAINED — it imports stdlib inside its body and
@@ -279,21 +279,261 @@ def mark_more_fired_tool(phone: str) -> dict:
     return {"ok": True, "marked": found}
 
 
+@ara.tool
+def set_interests_tool(phone: str, interests_csv: str) -> dict:
+    """Save a subscriber's interests (comma-separated list) for FORCED
+    COLLISION drops. Auto-subscribes the phone if they aren't already.
+
+    Args:
+        phone: the sender's phone number.
+        interests_csv: e.g. "taylor swift, F1, mushroom foraging". "and"
+            is also treated as a separator. Max 10 interests; duplicates
+            and empties dropped; stored lowercase.
+    """
+    import datetime as dt
+    import json
+    import os
+    import re
+    import tempfile
+    from pathlib import Path
+
+    def _subs_path() -> Path:
+        override = os.environ.get("CONSPIRACYYY_SUBSCRIBERS")
+        return Path(override) if override else Path(tempfile.gettempdir()) / "conspiracyyy_subscribers.json"
+
+    def _normalize(raw: str) -> str:
+        if not raw:
+            return ""
+        raw = raw.strip()
+        digits = re.sub(r"[^\d]", "", raw)
+        if not digits:
+            return ""
+        if raw.startswith("+"):
+            return "+" + digits
+        if len(digits) == 10:
+            return "+1" + digits
+        if len(digits) == 11 and digits.startswith("1"):
+            return "+" + digits
+        return "+" + digits
+
+    def _parse_interests(csv: str) -> list:
+        if not csv:
+            return []
+        # Split on commas, semicolons, and " and ".
+        parts = re.split(r"[,;]|\s+and\s+", csv, flags=re.IGNORECASE)
+        out: list = []
+        seen: set = set()
+        for p in parts:
+            t = (p or "").strip().lower()
+            t = t.strip("\"'")
+            if t and t not in seen:
+                seen.add(t)
+                out.append(t)
+            if len(out) >= 10:
+                break
+        return out
+
+    phone = _normalize(phone)
+    if not phone:
+        return {"ok": False, "error": "invalid phone"}
+    interests = _parse_interests(interests_csv or "")
+    p = _subs_path()
+    data = {"subscribers": []}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            data = {"subscribers": []}
+    data.setdefault("subscribers", [])
+    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    found = False
+    for s in data["subscribers"]:
+        if s.get("phone") == phone:
+            s["interests"] = interests
+            found = True
+            break
+    if not found:
+        data["subscribers"].append({
+            "phone": phone,
+            "subscribed_at": now_iso,
+            "interests": interests,
+        })
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    tmp.replace(p)
+    return {
+        "ok": True,
+        "phone": phone,
+        "interests": interests,
+        "auto_subscribed": not found,
+        "subscriber_count": len(data["subscribers"]),
+    }
+
+
+@ara.tool
+def get_subscriber_interests_tool(phone: str) -> dict:
+    """Return this subscriber's saved interests (empty list if none). Also
+    tells the caller whether the phone is subscribed at all."""
+    import json
+    import os
+    import re
+    import tempfile
+    from pathlib import Path
+
+    def _subs_path() -> Path:
+        override = os.environ.get("CONSPIRACYYY_SUBSCRIBERS")
+        return Path(override) if override else Path(tempfile.gettempdir()) / "conspiracyyy_subscribers.json"
+
+    def _normalize(raw: str) -> str:
+        if not raw:
+            return ""
+        raw = raw.strip()
+        digits = re.sub(r"[^\d]", "", raw)
+        if not digits:
+            return ""
+        if raw.startswith("+"):
+            return "+" + digits
+        if len(digits) == 10:
+            return "+1" + digits
+        if len(digits) == 11 and digits.startswith("1"):
+            return "+" + digits
+        return "+" + digits
+
+    phone = _normalize(phone)
+    p = _subs_path()
+    if not p.exists():
+        return {"interests": [], "subscribed": False}
+    try:
+        data = json.loads(p.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {"interests": [], "subscribed": False}
+    for s in data.get("subscribers", []):
+        if s.get("phone") == phone:
+            return {"interests": list(s.get("interests") or []), "subscribed": True}
+    return {"interests": [], "subscribed": False}
+
+
+@ara.tool
+def pick_collision_pair_tool(
+    interests: list,
+    hn_items: list,
+    reddit_items: list,
+    nyt_items: list = None,
+    bbc_items: list = None,
+    wikipedia_items: list = None,
+) -> dict:
+    """Pick a headline pair where ONE side matches an audience interest and
+    the OTHER side does not — the "forced collision" that makes readers learn
+    about new subject areas. Pools across all provided sources (HN, Reddit,
+    NYT, BBC, Wikipedia).
+
+    Returns:
+        {"aligned": {..., source_side}, "foreign": {..., source_side},
+         "fallback": False} on success, or {"aligned": None, "foreign": None,
+         "fallback": True} if no clean split is possible.
+    """
+    STOPWORDS = {"the", "a", "an", "of", "and", "or", "in", "on", "for", "to",
+                 "with", "at", "by", "from", "as", "is", "was", "are", "be",
+                 "this", "that", "it", "its", "but", "not", "you", "your",
+                 "new", "says", "said", "will", "has", "have", "had", "about"}
+
+    def _tokens(s: str) -> set:
+        out: set = set()
+        for w in (s or "").lower().split():
+            clean = "".join(ch for ch in w if ch.isalnum())
+            if clean and clean not in STOPWORDS and len(clean) > 2:
+                out.add(clean)
+        return out
+
+    def _matches_any(title: str, ints: list) -> bool:
+        t = (title or "").lower()
+        title_toks = _tokens(title)
+        for i in ints:
+            i_clean = (i or "").strip().lower()
+            if not i_clean:
+                continue
+            if i_clean in t:
+                return True
+            i_toks = _tokens(i_clean)
+            if i_toks and (i_toks & title_toks):
+                return True
+        return False
+
+    SENSITIVE_KEYWORDS = (
+        "shooting", "shooter", "gunman", "gunmen", "mass shooting",
+        "school shooting", "massacre", "terror", "terrorist", "terrorism",
+        "bombing", "bomber", "suicide", "self-harm", "self harm",
+        "sexual assault", "rape", "raped", "molest", "abuse",
+        "child abuse", "pedophile", "groom", "trafficking",
+        "domestic violence", "hate crime", "genocide", "ethnic cleansing",
+        "war crime", "killed", "killing", "murder", "murdered", "homicide",
+        "dead", "died", "death toll", "fatal", "fatality", "casualties",
+        "missing person", "abducted", "kidnap", "overdose",
+        "famine", "starvation", "refugee crisis", "humanitarian crisis",
+        "airstrike", "air strike", "missile strike", "hostage",
+    )
+
+    def _is_sensitive(title: str) -> bool:
+        t = (title or "").lower()
+        return any(kw in t for kw in SENSITIVE_KEYWORDS)
+
+    ints = [str(i).strip().lower() for i in (interests or []) if i]
+
+    pools = [
+        ("hackernews", list(hn_items or [])),
+        ("reddit", list(reddit_items or [])),
+        ("nyt", list(nyt_items or [])),
+        ("bbc", list(bbc_items or [])),
+        ("wikipedia", list(wikipedia_items or [])),
+    ]
+    pools = [(n, [x for x in p if not _is_sensitive(x.get("title", ""))]) for n, p in pools]
+    pools = [(n, p) for n, p in pools if p]
+
+    if not ints or not pools:
+        return {"aligned": None, "foreign": None, "fallback": True}
+
+    for a_name, a_pool in pools:
+        for f_name, f_pool in pools:
+            if a_name == f_name:
+                continue
+            aligned = next((x for x in a_pool if _matches_any(x.get("title", ""), ints)), None)
+            foreign = next((x for x in f_pool if not _matches_any(x.get("title", ""), ints)), None)
+            if aligned and foreign and aligned.get("id") != foreign.get("id"):
+                a = dict(aligned); a["source_side"] = a_name
+                f = dict(foreign); f["source_side"] = f_name
+                return {"aligned": a, "foreign": f, "fallback": False}
+
+    for name, pool in pools:
+        aligned = next((x for x in pool if _matches_any(x.get("title", ""), ints)), None)
+        foreign = next((x for x in pool if not _matches_any(x.get("title", ""), ints)), None)
+        if aligned and foreign and aligned.get("id") != foreign.get("id"):
+            a = dict(aligned); a["source_side"] = name
+            f = dict(foreign); f["source_side"] = name
+            return {"aligned": a, "foreign": f, "fallback": False}
+
+    return {"aligned": None, "foreign": None, "fallback": True}
+
+
 # ---------- NEWS + JOURNAL TOOLS ------------------------------------------
 
 
 @ara.tool
 def fetch_recent_headlines() -> dict:
-    """Fetch today's trending items from Hacker News and Reddit.
+    """Fetch today's trending items from Hacker News, Reddit, NYT, BBC, and
+    Wikipedia's In-The-News feed. Stdlib only.
 
-    Returns dict with keys "hackernews" and "reddit", each a list of up to 20
-    items shaped {source, id, title, url, ts, summary}. Uses stdlib only.
+    Returns dict with keys "hackernews", "reddit", "nyt", "bbc", "wikipedia",
+    each a list of items shaped {source, id, title, url, ts, summary}.
     """
     import datetime as dt
     import hashlib
     import json
+    import re
     import urllib.error
     import urllib.request
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
 
     UA = "conspiracyyy/0.1 (+https://ara.so)"
 
@@ -301,6 +541,9 @@ def fetch_recent_headlines() -> dict:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
         with urllib.request.urlopen(req, timeout=10.0) as r:
             return r.read()
+
+    def _sid(prefix: str, raw: str) -> str:
+        return f"{prefix}_{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]}"
 
     def _fetch_hn(limit: int = 20) -> list[dict]:
         try:
@@ -313,7 +556,7 @@ def fetch_recent_headlines() -> dict:
             url = h.get("url") or f"https://news.ycombinator.com/item?id={oid}"
             out.append({
                 "source": "hackernews",
-                "id": f"hn_{oid}" if oid else "hn_" + hashlib.sha1(url.encode()).hexdigest()[:12],
+                "id": f"hn_{oid}" if oid else _sid("hn", url),
                 "title": (h.get("title") or "").strip(),
                 "url": url,
                 "ts": h.get("created_at") or "",
@@ -353,7 +596,93 @@ def fetch_recent_headlines() -> dict:
                 break
         return out
 
-    return {"hackernews": _fetch_hn(20), "reddit": _fetch_reddit(20)}
+    def _parse_rss(raw: bytes, source_name: str, limit: int = 20) -> list[dict]:
+        try:
+            root = ET.fromstring(raw)
+        except ET.ParseError:
+            return []
+        out: list[dict] = []
+        for item in root.findall("channel/item")[:limit]:
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            desc = (item.findtext("description") or "").strip()
+            pub = item.findtext("pubDate") or ""
+            try:
+                ts = parsedate_to_datetime(pub).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except (TypeError, ValueError):
+                ts = ""
+            clean_link = link.split("?at_medium=", 1)[0] if "?at_medium=" in link else link
+            if not title or not clean_link:
+                continue
+            out.append({
+                "source": source_name,
+                "id": _sid(source_name, clean_link),
+                "title": title,
+                "url": clean_link,
+                "ts": ts,
+                "summary": desc[:500],
+            })
+        return out
+
+    def _fetch_nyt(limit: int = 20) -> list[dict]:
+        try:
+            return _parse_rss(_fetch("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"), "nyt", limit=limit)
+        except urllib.error.URLError:
+            return []
+
+    def _fetch_bbc(limit: int = 20) -> list[dict]:
+        try:
+            return _parse_rss(_fetch("https://feeds.bbci.co.uk/news/rss.xml"), "bbc", limit=limit)
+        except urllib.error.URLError:
+            return []
+
+    _tag = re.compile(r"<[^>]+>")
+
+    def _fetch_wikipedia(limit: int = 20) -> list[dict]:
+        today = dt.datetime.now(dt.timezone.utc).date()
+        for candidate in (today, today - dt.timedelta(days=1)):
+            url = f"https://en.wikipedia.org/api/rest_v1/feed/featured/{candidate.year:04d}/{candidate.month:02d}/{candidate.day:02d}"
+            try:
+                raw = _fetch(url)
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    continue
+                return []
+            except urllib.error.URLError:
+                return []
+            try:
+                data = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError:
+                return []
+            out: list[dict] = []
+            for story in data.get("news", [])[:limit]:
+                links = story.get("links") or []
+                if not links:
+                    continue
+                lead = links[0]
+                title = (lead.get("titles") or {}).get("normalized") or lead.get("title") or ""
+                page_url = ((lead.get("content_urls") or {}).get("desktop") or {}).get("page") or ""
+                summary = _tag.sub("", story.get("story", "")).strip()
+                if not title or not page_url:
+                    continue
+                out.append({
+                    "source": "wikipedia",
+                    "id": _sid("wiki", page_url),
+                    "title": title,
+                    "url": page_url,
+                    "ts": candidate.strftime("%Y-%m-%dT00:00:00Z"),
+                    "summary": summary[:500],
+                })
+            return out
+        return []
+
+    return {
+        "hackernews": _fetch_hn(20),
+        "reddit": _fetch_reddit(20),
+        "nyt": _fetch_nyt(20),
+        "bbc": _fetch_bbc(20),
+        "wikipedia": _fetch_wikipedia(20),
+    }
 
 
 @ara.tool
@@ -509,15 +838,24 @@ def generate_conspiracy_tool(
     thing_b: str,
     context_a: str = "",
     context_b: str = "",
+    interests: list = None,
 ) -> dict:
     """Generate the satirical red-string conspiracy connecting two public
-    entities. context_a/context_b are optional flavour (real headlines); pass
-    empty strings for freeform "X + Y" requests with no news grounding.
+    entities, using Anthropic tool-use (structured output) so the returned
+    dict can never be corrupted by unescaped quotes in the body.
 
-    Returns dict with keys: refused, title, body, red_string_score, loop_back,
-    disclaimer (or {refused: true, reason: ...}).
+    Args:
+        context_a, context_b: optional real-headline flavour. Pass empty
+            strings for freeform "X + Y" requests with no news grounding.
+        interests: optional list of audience interests for FORCED COLLISION
+            mode — treat thing_a as within their world, thing_b as foreign,
+            and weave 1-2 sentences of real factual context about thing_b
+            so the reader learns something new.
+
+    Returns dict: {refused, title, body, red_string_score, loop_back,
+    disclaimer} or {refused: true, reason: ...}.
     """
-    import json
+    import datetime as dt
     import os
     import subprocess
     import sys
@@ -533,60 +871,97 @@ def generate_conspiracy_tool(
         import anthropic  # type: ignore
 
     MODEL = os.environ.get("CONSPIRACY_MODEL", "claude-sonnet-4-5")
+    TODAY = dt.date.today().isoformat()
 
-    SYSTEM_PROMPT = """You are the RED STRING ORACLE — a chronically online, gossip-girl-meets-corkboard
+    SYSTEM_PROMPT = f"""You are the RED STRING ORACLE — a chronically online, gossip-girl-meets-corkboard
 conspiracy theorist who generates OBVIOUSLY SATIRICAL, dramatically unhinged
 "conspiracy theories" connecting two public figures, celebrities, politicians,
 fictional characters, brands, places, or cultural objects.
 
+Today is {TODAY}. Prefer items published today. When you reference a date,
+write it plainly (e.g. "{TODAY}" or "April 18") — never ##, ██, or any
+censor blocks. The absurdity itself is the disclaimer.
+
 ETHICS — NON-NEGOTIABLE:
-1. ONLY accept CLEARLY PUBLIC FIGURES or cultural objects. If either input looks
-   like a private non-famous individual (e.g. "my coworker Greg", a random full
-   name with no cultural presence), REFUSE and set refused=true with a playful
-   reason asking them to pick a celebrity instead.
+1. ONLY accept CLEARLY PUBLIC FIGURES or cultural objects. If either input
+   looks like a private non-famous individual, refuse via the emit_refusal
+   tool with a playful reason asking them to pick a celebrity instead.
 2. NEVER allege real crimes. NEVER invent real relationships, affairs, or
    anything that could be mistaken for fact. NEVER be mean-spirited or
-   defamatory. The absurdity itself is the disclaimer.
+   defamatory.
 3. Keep it PLAYFUL, ABSURDIST, UNHINGED — think astrological patterns, menu
    items, sock colors, backwards song lyrics, birthday numerology, parking
    garages, specific shades of beige.
+4. SENSITIVE TOPICS — HARD NO. Do NOT build drops around, reference, or riff on:
+   mass shootings (school, church, workplace), terrorism, war casualties,
+   suicide / self-harm, sexual assault, child abuse / exploitation, domestic
+   violence, hate crimes, genocide, active humanitarian crises, fatal
+   accidents involving named victims, missing persons, overdose deaths, or
+   individual tragedies. If a provided headline touches any of these, IGNORE
+   that headline entirely and call emit_refusal with reason
+   "sensitive_topic" — do NOT try to reframe it as satire. The joke is
+   celebrity trivia and cultural noise, never human suffering.
 
 GROUNDING — THIS IS WHAT MAKES IT FUNNY:
-The CONTEXT block below contains ACTUAL RECENT NEWS HEADLINES for A and B.
-You MUST weave specific concrete details from those headlines into the body:
-dates, product names, song/movie/album titles, scores, prices, places,
-company names — whatever real specifics the headlines give you. The joke is
-"real current event + real current event + absurd invented link". Example
-shape: "Apple just dropped the iPhone 17 Pro. Olivia Rodrigo's GUTS vinyl
-shipped the same week. The camera bump — you guessed it — is the EXACT
-shape of her album cover."
+If a CONTEXT block is provided below, it contains ACTUAL RECENT NEWS HEADLINES
+for A and B. Weave specific concrete details from those headlines into the
+body: product names, song/movie/album titles, scores, prices, places, company
+names. The joke is "real current event + real current event + absurd invented
+link".
 - The ABSURD CONNECTION is invented (matching shapes, numerology, astrology,
   backwards lyrics, beige).
 - The BASE FACTS anchoring the drop must come from the provided context.
-- NEVER invent current-event "facts" not supported by the context. Do not
-  claim "X launched Y yesterday" unless "Y" is literally in the headlines
-  you were given.
-- Speculative evidence bullets should be *obviously* speculative (astrology,
-  sock colors, parking garages, specific shades of beige), not fake news.
-- At least 3 evidence bullets must anchor to a concrete specific from the
-  provided context (a title, date, number, name, place).
-- If NO context is provided (rare fallback), keep the body shorter and
-  entirely speculative in tone — do not invent current events.
+- NEVER invent current-event "facts" not in the context.
+- Speculative evidence bullets should be *obviously* speculative, not fake news.
+- If NO context is provided (freeform X+Y), keep the body shorter and entirely
+  speculative in tone — do not invent current events.
 
-STRUCTURE (aim for ~280-340 words in the body):
-  - Dramatic opening hook ("Okay. OKAY. Buckle up.") that names both real
-    events from the context in the first 2 sentences.
-  - 5-7 "EVIDENCE" bullets, each starting with a redacted timestamp like
-    "[##-##-#### • ##:## EST]" and escalating absurdity. At least 3 of
-    these must cite specifics from the real headlines.
-  - A SHOCKING REVELATION line in ALL CAPS.
-  - Absurd conclusion that LOOPS BACK to the opening, implying the conspiracy
-    goes even deeper.
+DATES — RELAXED:
+Evidence bullets do NOT need a timestamp prefix. Not everything is time-linked.
+Only mention a date when it's actually relevant (the headline explicitly
+references an event on that day). When you DO use a date, write it plainly.
+Never use ## or █ censor blocks.
+
+STRUCTURE — THIS IS AN SMS:
+This ships as an iMessage. Users read a lot of these. Short and punchy.
+  - TOTAL body length: 100–150 words. Absolute ceiling: 170.
+  - 3–5 evidence bullets. ONE claim per bullet. 8–16 words per bullet.
+    Each bullet should read like a single text message.
+  - Short sentences (under ~15 words). At most ONE em-dash per sentence.
+    No nested parentheticals.
+  - Blank line between sections:
+      1. Hook — 1 short sentence. If context exists, name both events.
+      2. Blank line, then the bullets.
+      3. Blank line, then a SHOCKING REVELATION line in ALL CAPS (one sentence).
+      4. Blank line, then a 1-sentence loop-back conclusion.
+  - Do NOT start bullets with bracketed timestamps. Start with a verb, a
+    name, a place, or a vibe word — something concrete.
+
+BULLET FORMATTING (STRICT):
+Each bullet MUST start on its own line, preceded by a literal newline.
+Use "• " as the marker. NEVER run bullets together inline with spaces
+between them. The renderer expects one bullet per line. Example (good):
+
+  • first claim here.
+  • second claim here.
+  • third claim here.
+
+Not this (bad): "• first claim. • second claim. • third claim."
+
+EXPLAIN UNFAMILIAR TERMS:
+If you use a term that isn't everyday English — a policy name, an acronym,
+niche jargon — include a 4–10 word plain-English gloss the first time you
+use it, inline. Example: "the pied-à-terre tax (a levy on pricey second
+homes)". Don't burn a whole bullet on definitions.
 
 VOICE: "sources say", "coincidence? I THINK NOT.", "follow the thread", "the
 girls who get it, get it", "this is not a drill", "wake UP", em-dashes,
 lowercase outbursts, dramatic line breaks. Sparingly use red-circle / thread
-emoji."""
+emoji.
+
+OUTPUT:
+Call emit_conspiracy with the full drop, or emit_refusal if either input is
+a private individual. Do not reply in plain text."""
 
     news_block = ""
     if context_a or context_b:
@@ -596,33 +971,65 @@ emoji."""
         if context_b:
             lines.append(f"  B's headline: {context_b}")
         lines.append(
-            "Reference at least 3 concrete specifics from these headlines "
-            "(titles, dates, product names, places, numbers) in the body. "
-            "Do NOT invent current events not listed here — stick to what the "
-            "headlines actually say. Invent ALL connections between them "
-            "(the absurd red string); do not claim the headlines are related "
-            "in reality."
+            "Reference concrete specifics from these headlines (titles, "
+            "product names, places, numbers) in the body. Do NOT invent "
+            "current events not listed here. Invent ALL connections between "
+            "them; do not claim the headlines are related in reality."
         )
         news_block = "\n".join(lines)
+
+    interests_block = ""
+    if interests:
+        ilist = ", ".join(str(i) for i in interests if i)
+        if ilist:
+            interests_block = (
+                f"\n\nAUDIENCE INTERESTS (forced-collision mode): the reader is into: {ilist}.\n"
+                f"Treat thing_a as within their world. Treat thing_b as foreign to "
+                f"them — weave 1-2 sentences of real, factual context about thing_b "
+                f"into the body so they learn something concrete. The conspiracy "
+                f"link remains absurdly satirical."
+            )
 
     user_prompt = (
         f"Generate a satirical conspiracy theory connecting:\n"
         f"  A: {thing_a}\n"
         f"  B: {thing_b}\n"
-        f"{news_block}\n\n"
-        "Return ONLY a JSON object (no prose, no code fences) with this EXACT schema:\n"
-        "{\n"
-        '  "refused": false,\n'
-        '  "title": "THE CONNECTION HAS BEEN ESTABLISHED (a dramatic ~6 word title)",\n'
-        '  "body": "the full ~300-word conspiracy with markdown bullets for evidence",\n'
-        '  "red_string_score": 1-10 integer (how unhinged this theory is),\n'
-        '  "loop_back": "one-sentence tease that implies the theory goes even deeper",\n'
-        '  "disclaimer": "This is 100% made up for entertainment purposes. No figures named were involved in any of this nonsense."\n'
-        "}\n\n"
-        "If EITHER input appears to be a private, non-famous individual (a "
-        "random personal name with no cultural presence), instead return:\n"
-        '{"refused": true, "reason": "a playful one-liner asking them to pick a celebrity, brand, or cultural object instead"}'
+        f"{news_block}"
+        f"{interests_block}\n\n"
+        f"Call emit_conspiracy with the drop, or emit_refusal if either input "
+        f"is a private non-famous individual."
     )
+
+    TOOLS = [
+        {
+            "name": "emit_conspiracy",
+            "description": "Emit the satirical red-string drop.",
+            "input_schema": {
+                "type": "object",
+                "required": ["refused", "title", "body", "red_string_score", "loop_back", "disclaimer"],
+                "properties": {
+                    "refused": {"type": "boolean"},
+                    "title": {"type": "string"},
+                    "body": {"type": "string"},
+                    "red_string_score": {"type": "integer", "minimum": 1, "maximum": 10},
+                    "loop_back": {"type": "string"},
+                    "disclaimer": {"type": "string"},
+                },
+            },
+        },
+        {
+            "name": "emit_refusal",
+            "description": "Refuse because an input is a private individual (not a public figure).",
+            "input_schema": {
+                "type": "object",
+                "required": ["refused", "reason"],
+                "properties": {
+                    "refused": {"type": "boolean"},
+                    "reason": {"type": "string"},
+                },
+            },
+        },
+    ]
 
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
@@ -632,25 +1039,16 @@ emoji."""
         model=MODEL,
         max_tokens=2000,
         system=SYSTEM_PROMPT,
+        tools=TOOLS,
+        tool_choice={"type": "any"},
         messages=[{"role": "user", "content": user_prompt}],
     )
-    text = msg.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```", 2)[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip().rstrip("`").strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {
-            "refused": False,
-            "title": "THE CONNECTION HAS BEEN ESTABLISHED",
-            "body": text,
-            "red_string_score": 7,
-            "loop_back": "but that's just what they WANT you to think…",
-            "disclaimer": "100% satirical fiction.",
-        }
+    for block in msg.content:
+        if getattr(block, "type", None) == "tool_use":
+            out = dict(block.input or {})
+            out["refused"] = bool(out.get("refused", block.name == "emit_refusal"))
+            return out
+    return {"refused": True, "reason": "oracle went silent — no structured output"}
 
 
 @ara.tool
@@ -752,8 +1150,9 @@ def get_last_drop_tool() -> dict:
 
 @ara.tool
 def rate_conspiracy_tool(body: str) -> dict:
-    """Score a conspiracy body on the red string scale (1-10)."""
-    import json
+    """Score a conspiracy body on the red string scale (1-10). Uses Anthropic
+    tool-use so the structured result can't be corrupted by string-level JSON
+    issues."""
     import os
     import subprocess
     import sys
@@ -772,29 +1171,36 @@ def rate_conspiracy_tool(body: str) -> dict:
     if not key:
         return {"red_string_score": 7, "verdict": "cannot rate — ANTHROPIC_API_KEY missing"}
     client = anthropic.Anthropic(api_key=key)
+    TOOLS = [{
+        "name": "emit_rating",
+        "description": "Emit the red-string rating for a conspiracy body.",
+        "input_schema": {
+            "type": "object",
+            "required": ["red_string_score", "verdict"],
+            "properties": {
+                "red_string_score": {"type": "integer", "minimum": 1, "maximum": 10},
+                "verdict": {"type": "string", "description": "One short chronically-online sentence."},
+            },
+        },
+    }]
     msg = client.messages.create(
         model=os.environ.get("CONSPIRACY_MODEL", "claude-sonnet-4-5"),
-        max_tokens=200,
+        max_tokens=300,
+        tools=TOOLS,
+        tool_choice={"type": "tool", "name": "emit_rating"},
         messages=[{
             "role": "user",
             "content": (
-                "Rate this conspiracy on the RED STRING SCALE (1=mild, 10=fully "
-                'unhinged). Return ONLY JSON: {"red_string_score": int, '
-                '"verdict": "one short chronically-online sentence"}.\n\n'
+                "Rate this conspiracy on the RED STRING SCALE (1=mild, "
+                "10=fully unhinged) via emit_rating.\n\n"
                 f"Theory:\n{body}"
             ),
         }],
     )
-    text = msg.content[0].text.strip()
-    if text.startswith("```"):
-        text = text.split("```", 2)[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip().rstrip("`").strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {"red_string_score": 7, "verdict": "certified unhinged behavior"}
+    for block in msg.content:
+        if getattr(block, "type", None) == "tool_use":
+            return dict(block.input or {})
+    return {"red_string_score": 7, "verdict": "certified unhinged behavior"}
 
 
 @ara.tool
@@ -823,8 +1229,11 @@ def random_pair_tool() -> dict:
     import hashlib
     import json
     import random
+    import re
     import urllib.error
     import urllib.request
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
 
     UA = "conspiracyyy/0.1 (+https://ara.so)"
     STOPWORDS = {"the", "a", "an", "of", "and", "or", "in", "on", "for", "to",
@@ -834,6 +1243,9 @@ def random_pair_tool() -> dict:
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "identity"})
         with urllib.request.urlopen(req, timeout=10.0) as r:
             return r.read()
+
+    def _sid(prefix: str, raw: str) -> str:
+        return f"{prefix}_{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]}"
 
     def _extract_entity(headline: str) -> str:
         """Heuristic: first 1-4 capitalised words (skipping stopwords), else
@@ -905,12 +1317,108 @@ def random_pair_tool() -> dict:
                 break
         return out
 
+    def _parse_rss(raw: bytes, source_name: str, limit: int = 15) -> list[dict]:
+        try:
+            root = ET.fromstring(raw)
+        except ET.ParseError:
+            return []
+        out: list[dict] = []
+        for item in root.findall("channel/item")[:limit]:
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            clean_link = link.split("?at_medium=", 1)[0] if "?at_medium=" in link else link
+            if not title or not clean_link:
+                continue
+            out.append({
+                "source": source_name,
+                "id": _sid(source_name, clean_link),
+                "title": title,
+                "url": clean_link,
+            })
+        return out
+
+    def _fetch_nyt(limit: int = 15) -> list[dict]:
+        try:
+            return _parse_rss(_fetch("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"), "nyt", limit=limit)
+        except urllib.error.URLError:
+            return []
+
+    def _fetch_bbc(limit: int = 15) -> list[dict]:
+        try:
+            return _parse_rss(_fetch("https://feeds.bbci.co.uk/news/rss.xml"), "bbc", limit=limit)
+        except urllib.error.URLError:
+            return []
+
+    _tag = re.compile(r"<[^>]+>")
+
+    def _fetch_wikipedia(limit: int = 15) -> list[dict]:
+        today = dt.datetime.now(dt.timezone.utc).date()
+        for candidate in (today, today - dt.timedelta(days=1)):
+            url = f"https://en.wikipedia.org/api/rest_v1/feed/featured/{candidate.year:04d}/{candidate.month:02d}/{candidate.day:02d}"
+            try:
+                raw = _fetch(url)
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    continue
+                return []
+            except urllib.error.URLError:
+                return []
+            try:
+                data = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError:
+                return []
+            out: list[dict] = []
+            for story in data.get("news", [])[:limit]:
+                links = story.get("links") or []
+                if not links:
+                    continue
+                lead = links[0]
+                title = (lead.get("titles") or {}).get("normalized") or lead.get("title") or ""
+                page_url = ((lead.get("content_urls") or {}).get("desktop") or {}).get("page") or ""
+                if not title or not page_url:
+                    continue
+                out.append({
+                    "source": "wikipedia",
+                    "id": _sid("wiki", page_url),
+                    "title": title,
+                    "url": page_url,
+                })
+            return out
+        return []
+
     hn = _fetch_hn(15)
     rd = _fetch_reddit(15)
+    nyt = _fetch_nyt(15)
+    bbc = _fetch_bbc(15)
+    wiki = _fetch_wikipedia(15)
 
-    if hn and rd:
-        a = random.choice(hn)
-        b = random.choice(rd)
+    SENSITIVE_KEYWORDS = (
+        "shooting", "shooter", "gunman", "gunmen", "mass shooting",
+        "school shooting", "massacre", "terror", "terrorist", "terrorism",
+        "bombing", "bomber", "suicide", "self-harm", "self harm",
+        "sexual assault", "rape", "raped", "molest", "abuse",
+        "child abuse", "pedophile", "groom", "trafficking",
+        "domestic violence", "hate crime", "genocide", "ethnic cleansing",
+        "war crime", "killed", "killing", "murder", "murdered", "homicide",
+        "dead", "died", "death toll", "fatal", "fatality", "casualties",
+        "missing person", "abducted", "kidnap", "overdose",
+        "famine", "starvation", "refugee crisis", "humanitarian crisis",
+        "airstrike", "air strike", "missile strike", "hostage",
+    )
+
+    def _is_sensitive(title: str) -> bool:
+        t = (title or "").lower()
+        return any(kw in t for kw in SENSITIVE_KEYWORDS)
+
+    all_items = [x for x in (hn + rd + nyt + bbc + wiki) if not _is_sensitive(x.get("title", ""))]
+    if len(all_items) >= 2:
+        a, b = random.sample(all_items, 2)
+        # Prefer mixing different domains when possible (one news-y, one web-y).
+        news_side = [x for x in all_items if x["source"] in ("nyt", "bbc", "wikipedia")]
+        web_side = [x for x in all_items if x["source"] in ("hackernews", "reddit")]
+        if news_side and web_side:
+            a = random.choice(news_side)
+            b = random.choice(web_side)
         return {
             "thing_a": _extract_entity(a["title"]),
             "thing_b": _extract_entity(b["title"]),
@@ -952,13 +1460,20 @@ def random_pair_tool() -> dict:
 
 
 REACTIVE_SYSTEM_PROMPT = """You are the RED STRING ORACLE running the inbound reply channel for
-CONSPIRACYYY — a chronically-online satirical conspiracy wire. Users text
+LIVEWIRE — a chronically-online satirical conspiracy wire. Users text
 a paired phone number; each inbound message is your input.
 
 ETHICS — NON-NEGOTIABLE:
 - Only public figures / brands / places / cultural objects.
 - Never private individuals.
 - Never allege real crimes or real relationships.
+- SENSITIVE TOPICS ARE OFF-LIMITS: mass shootings, terrorism, war
+  casualties, suicide, sexual assault, child abuse, domestic violence,
+  hate crimes, genocide, active humanitarian crises, fatal accidents,
+  missing persons, overdose deaths, or individual tragedies. Never pick a
+  headline touching these topics for a drop. If the only fresh headlines
+  are all sensitive, reply plainly: "the wire's quiet on funny news right
+  now — today's headlines are too heavy to riff on. try MORE in a bit. 🧵"
 - Every generated drop carries a disclaimer. The absurdity is the disclaimer.
 - If generate_conspiracy_tool returns refused=true, pass its `reason` text
   through verbatim as the reply.
@@ -972,71 +1487,114 @@ failing that, use the paired phone route). Subscriber tools normalize for
 you.
 
 EVERY generated drop MUST be grounded in real recent news — that's what
-makes the bit funny ("real current event + real current event + absurd
-invented link"). random_pair_tool already returns live headlines + real
-sources; for freeform "X + Y" use search_news_for_entity on both sides
-before generating.
+makes the bit funny. Prefer headlines published TODAY; if everything is 2+
+days old, still pick the freshest available.
+
+DATES: don't prefix evidence bullets with timestamps — mention a date only
+when it's actually relevant to a point (e.g. the headline is explicitly
+tied to that day). Write dates plainly. Never use ## or █ censor blocks.
+
+FORCED COLLISION (the core mechanic):
+When a subscriber has saved interests, every drop they get should pair ONE
+thing from their interests with ONE thing they've probably never heard of —
+so they learn about a new subject area. The generator receives their
+interests and will weave 1-2 sentences of factual context about the unfamiliar
+side. Use the MORE flow below to drive this.
 
 COMMAND ROUTING (match case-insensitively against the FIRST non-whitespace
-token of the user's message):
+token of the user's message, except where noted):
 
 - SUBSCRIBE / SUB / START / YES / JOIN
     → add_subscriber_tool(phone).
     → reply: "🔴 you're IN. expect a drop every 2 hours. text MORE for one
-      now. STOP to bail. welcome to the corkboard 🧵"
+      now. STOP to bail. — quick one: what are you into? text `INTERESTS
+      <comma list>` so every drop pairs one thing you know with one you
+      don't. welcome to the corkboard 🧵"
     → if already_subscribed, reply: "relax — you're already on the list 📌.
-      text MORE for a fresh drop."
+      text MORE for a fresh drop. (or update INTERESTS any time.)"
 
 - UNSUBSCRIBE / STOP / OFF / NO / QUIT / LEAVE
     → remove_subscriber_tool(phone).
     → reply: "unsubscribed. the red string remembers. 📌"
 
+- INTERESTS / "I'M INTO" / "IM INTO" / "I LIKE" (followed by a list)
+    → strip the leading command token(s); what remains is the interests CSV.
+      If nothing follows (bare INTERESTS), reply:
+      "so — what are you into? text `INTERESTS taylor swift, F1, mushroom
+      foraging` (comma list). we use it to pair something you know with
+      something you don't. that's how you learn stuff while reading
+      conspiracy slop 🧵"
+      If a list follows, call set_interests_tool(phone, interests_csv=<list>).
+      On ok reply: "locked in 🧵 — your red string now crosses: {interests}.
+      text MORE for a collision drop." (If auto_subscribed, prepend
+      "🔴 you're IN.")
+
 - MORE / NEXT / AGAIN
     → check_more_cooldown_tool(phone). If allowed=false, reply:
-      "easy tiger — ask me again in {wait_seconds}s. the corkboard needs
-      a minute." and STOP.
-    → otherwise: fetch_recent_headlines(), get_journal_state(), pick one
-      unused HN + one unused Reddit item from DIFFERENT domains. Extract
-      canonical public entities for each. Call
-      generate_conspiracy_tool(thing_a, thing_b, context_a, context_b).
+      "easy tiger — ask me again in {wait_seconds}s." and STOP.
+    → fetch_recent_headlines() (returns hackernews, reddit, nyt, bbc,
+      wikipedia), get_journal_state(), get_subscriber_interests_tool(phone).
+    → FORCED COLLISION PATH: if interests is non-empty, call
+      pick_collision_pair_tool(interests, hn_items, reddit_items,
+      nyt_items, bbc_items, wikipedia_items) passing all five lists. If it
+      returns a non-fallback pair whose ids are BOTH unused, use it —
+      `aligned` → thing_a (familiar), `foreign` → thing_b (teaches them).
+    → FALLBACK PATH: if no collision pair (no interests, or no split
+      possible), pick one unused item from one source + one unused item from
+      a DIFFERENT source. Prefer news + web crossovers (e.g. NYT + Reddit,
+      BBC + HN, Wikipedia + Reddit).
+    → Extract canonical entities. Call generate_conspiracy_tool(thing_a,
+      thing_b, context_a, context_b, interests=<interests list or None>).
       If refused, try a different pair (max 3 retries).
-    → on success: record_drop(...), then mark_more_fired_tool(phone), then
-      reply with the full title + body + loop_back.
+    → on success: record_drop(...), mark_more_fired_tool(phone), reply
+      with title + body + loop_back.
 
 - LAST / LATEST / RECENT
     → get_last_drop_tool(). If empty, reply: "no drops yet — the wire is
       silent 📡. text MORE to force one." Otherwise reply title + body +
       loop_back.
 
+- SOURCES / SRC
+    → get_last_drop_tool(). If empty, reply: "no drops yet — nothing to
+      source."
+    → Otherwise reply:
+      "SOURCES for '<title>':
+       A: <source_a.url or source_a.title>
+       B: <source_b.url or source_b.title>
+       (100% satirical — the absurd link is invented; the base facts are
+       real headlines.)"
+      If a side has no url, show just the title.
+
 - RATE
     → get_last_drop_tool(); if empty, same reply as LAST. Otherwise
       rate_conspiracy_tool(body) and reply: "{score}/10 — {verdict}"
 
 - RANDOM
-    → random_pair_tool() — it returns {thing_a, thing_b, context_a,
-      context_b, source_a, source_b} grounded in LIVE HEADLINES. Pass
-      context_a and context_b straight into generate_conspiracy_tool, and
-      pass source_a and source_b straight into record_drop (NO synthetic
-      sources — they're already real). Reply with the drop.
+    → random_pair_tool() — returns live-headline-grounded pair. Also call
+      get_subscriber_interests_tool(phone) and pass interests into
+      generate_conspiracy_tool if any. Pass source_a/source_b straight to
+      record_drop. Reply with the drop.
 
 - "<X> + <Y>" / "<X> and <Y>" / "connect <X> and <Y>"
     → parse the two entities. Call search_news_for_entity(thing_a) AND
-      search_news_for_entity(thing_b). From each result list pick the most
-      relevant recent headline (prefer ones actually naming the entity).
-      Pass those headlines as context_a/context_b to
-      generate_conspiracy_tool. Pass the two picked result objects
-      ({source, id, title, url}) as source_a/source_b to record_drop. If
+      search_news_for_entity(thing_b). From each result pick the most
+      relevant recent headline. Pass those as context_a/context_b.
+      Also pass the subscriber's interests (via
+      get_subscriber_interests_tool) into generate_conspiracy_tool. Pass
+      the two result objects as source_a/source_b to record_drop. If
       either search returns empty, proceed with context="" and a
       synthesized source {source:'request', id:'req_<short-hash>',
       title:thing, url:''} for that side. Reply with the drop.
 
 - HELP / "?" / anything unparseable
     → reply the short menu:
-      "commands: SUBSCRIBE · STOP · MORE · LAST · RATE · RANDOM · 'X + Y' to
-      connect anything. 100% satirical 🔴🧵"
+      "commands: SUBSCRIBE · STOP · MORE · LAST · RATE · RANDOM ·
+      INTERESTS <csv> · SOURCES · 'X + Y' to connect anything. 100%
+      satirical 🔴🧵"
 
 KEEP REPLIES PUNCHY. A full drop is fine for MORE / LAST / X+Y / RANDOM, but
-for SUBSCRIBE / STOP / HELP / cooldown, one or two short lines max.
+for SUBSCRIBE / STOP / INTERESTS / SOURCES / HELP / cooldown, one or two
+short lines max.
 """
 
 
@@ -1048,6 +1606,9 @@ ara.Automation(
         remove_subscriber_tool,
         check_more_cooldown_tool,
         mark_more_fired_tool,
+        set_interests_tool,
+        get_subscriber_interests_tool,
+        pick_collision_pair_tool,
         fetch_recent_headlines,
         search_news_for_entity,
         get_journal_state,

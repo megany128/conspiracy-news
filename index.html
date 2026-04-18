@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CONSPIRACYYY — a 24/7 conspiracy wire service</title>
+<title>LIVEWIRE — a 24/7 conspiracy wire service</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Anton&family=Redacted+Script:wght@400;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -429,6 +429,71 @@
   .status.ok{color:#4a7a2a}
   .status.err{color:var(--stamp)}
 
+  /* ONBOARDING — INTERESTS */
+  .onboard{
+    max-width:780px;
+    padding:26px 30px 22px;
+    margin-bottom:28px;
+    transform:rotate(0.3deg);
+  }
+  .onboard.hidden{display:none}
+  .onboard h3{
+    font-family:'Anton',sans-serif;
+    color:var(--stamp);font-size:24px;line-height:1.1;
+    letter-spacing:.02em;margin-bottom:4px;
+  }
+  .onboard .sub{
+    font-family:'Special Elite',monospace;
+    font-size:13px;color:var(--ink);opacity:.8;
+    margin-bottom:14px;line-height:1.55;
+  }
+  .chips{
+    display:flex;flex-wrap:wrap;gap:6px;
+    padding:6px 0 10px;min-height:30px;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 10px;
+    background:rgba(150,18,33,.1);
+    border:1px dashed var(--stamp);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;color:var(--stamp);
+    letter-spacing:.02em;
+  }
+  .chip button{
+    background:none;border:none;color:var(--stamp);
+    font-family:'IBM Plex Mono',monospace;font-size:14px;
+    cursor:pointer;padding:0;line-height:1;opacity:.7;
+  }
+  .chip button:hover{opacity:1}
+  .chip-input{
+    width:100%;
+    background:transparent;border:none;border-bottom:2px dashed var(--ink);
+    font-family:'Special Elite',monospace;
+    font-size:16px;color:var(--ink);
+    padding:6px 0;outline:none;
+    margin-bottom:12px;
+  }
+  .onboard-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .onboard-actions .btn{font-size:13px;padding:9px 14px;box-shadow:3px 3px 0 #000}
+  .onboard-actions .btn.ghost{color:var(--ink);border-color:var(--ink);box-shadow:3px 3px 0 rgba(0,0,0,.2)}
+  .edit-interests{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+    padding:4px 10px;
+    border:1px solid #5a4a2a;border-radius:999px;
+    color:#b8a378;text-decoration:none;
+    letter-spacing:.03em;cursor:pointer;
+    background:transparent;
+  }
+  .edit-interests:hover{color:var(--cream);border-color:var(--cream)}
+  .tip-line{
+    font-family:'Special Elite',monospace;
+    color:#b8a378;font-size:13px;text-align:center;
+    margin:-14px 0 24px;letter-spacing:.02em;line-height:1.55;
+  }
+  .tip-line b{color:var(--red-bright)}
+
   /* SCREENSHOT MODE */
   body.shot .strings,body.shot .grain{display:none}
   body.shot .wrap > *:not(.folder){display:none}
@@ -484,8 +549,20 @@
 <div class="wrap">
 
   <!-- HERO -->
-  <h1 class="brand">CONSPIRAC<span>Y</span><span>Y</span><span class="dot">Y</span> <span style="color:var(--red-bright)">🔴</span></h1>
+  <h1 class="brand">LIVEWIR<span class="dot">E</span> <span style="color:var(--red-bright)">🔴</span></h1>
   <p class="tagline">a 24/7 conspiracy wire service. every 2 hours, our agent scans real news, picks two unrelated stories, and texts you the unhinged red-string theory connecting them. <b>100% satirical.</b></p>
+
+  <!-- ONBOARDING — WHAT ARE YOU INTO? -->
+  <div class="paper onboard hidden" id="onboard">
+    <h3>so — what are you into?</h3>
+    <p class="sub">drop a few things. music, sports, weird corners of the internet, whatever. we use it to pair something you <b>know</b> next to something you <b>don't</b> — that's the point. you learn stuff while reading conspiracy slop.</p>
+    <div class="chips" id="chips"></div>
+    <input class="chip-input" id="chipInput" type="text" placeholder="type + enter (e.g. taylor swift, F1, mushroom foraging)" autocomplete="off"/>
+    <div class="onboard-actions">
+      <button class="btn" id="saveInterests" type="button">🔴 LOCK IT IN</button>
+      <button class="btn ghost" id="skipInterests" type="button">skip for now</button>
+    </div>
+  </div>
 
   <!-- CTA -->
   <div class="cta-wrap">
@@ -510,7 +587,7 @@
     <div class="wire-head">
       <div class="dots"><span class="d1"></span><span class="d2"></span><span class="d3"></span></div>
       <div class="wire-counter">DROPS TODAY: <b id="dropsToday">0</b></div>
-      <div class="wire-label"><span>CONSPIRACYYY-WIRE :: LIVE</span><span class="pulse-dot"></span></div>
+      <div class="wire-label"><span>LIVEWIRE :: LIVE</span><span class="pulse-dot"></span></div>
     </div>
     <div class="wire-body" id="wireBody">
       <!-- drops injected here -->
@@ -522,6 +599,7 @@
 
   <!-- ON-DEMAND -->
   <div class="divider">or generate one on demand →</div>
+  <div class="tip-line">tip: <b>one thing you're into</b> + <b>one thing you've never heard of</b> = you learn stuff. <button class="edit-interests" id="editInterests" type="button">edit your interests</button></div>
   <div class="inputs">
     <div class="paper input-card">
       <label>Subject A</label>
@@ -574,6 +652,103 @@
 <script>
 (() => {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // --- INTERESTS (localStorage) + ONBOARDING ---
+  const INTERESTS_KEY = 'conspiracyyy_interests';
+  const onboard = document.getElementById('onboard');
+  const chips = document.getElementById('chips');
+  const chipInput = document.getElementById('chipInput');
+  const saveInterests = document.getElementById('saveInterests');
+  const skipInterests = document.getElementById('skipInterests');
+  const editInterestsBtn = document.getElementById('editInterests');
+
+  function loadInterests(){
+    try {
+      const raw = localStorage.getItem(INTERESTS_KEY);
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : null;
+    } catch(e){ return null; }
+  }
+
+  function saveInterestsList(arr){
+    try { localStorage.setItem(INTERESTS_KEY, JSON.stringify(arr)); } catch(e){}
+  }
+
+  function getInterests(){
+    const v = loadInterests();
+    return Array.isArray(v) ? v : [];
+  }
+
+  let draftInterests = [];
+
+  function renderChips(){
+    chips.innerHTML = '';
+    draftInterests.forEach((t, i) => {
+      const el = document.createElement('span');
+      el.className = 'chip';
+      el.innerHTML = `${escapeHtmlSafe(t)} <button type="button" data-i="${i}" aria-label="remove">×</button>`;
+      chips.appendChild(el);
+    });
+    chips.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = parseInt(b.dataset.i, 10);
+        draftInterests.splice(idx, 1);
+        renderChips();
+      });
+    });
+  }
+
+  function escapeHtmlSafe(s){
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function addChipFromInput(){
+    const raw = chipInput.value;
+    if (!raw) return;
+    // split on commas so "a, b, c" becomes 3 chips
+    const bits = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    for (const b of bits) {
+      if (!draftInterests.includes(b) && draftInterests.length < 10) draftInterests.push(b);
+    }
+    chipInput.value = '';
+    renderChips();
+  }
+
+  function openOnboarding(prefill){
+    draftInterests = Array.isArray(prefill) ? prefill.slice() : [];
+    renderChips();
+    onboard.classList.remove('hidden');
+    setTimeout(() => chipInput.focus(), 50);
+  }
+
+  function closeOnboarding(){
+    onboard.classList.add('hidden');
+    chipInput.value = '';
+  }
+
+  chipInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addChipFromInput(); }
+  });
+  chipInput.addEventListener('blur', () => { if (chipInput.value.trim()) addChipFromInput(); });
+  saveInterests.addEventListener('click', () => {
+    // commit any pending text
+    if (chipInput.value.trim()) addChipFromInput();
+    saveInterestsList(draftInterests);
+    closeOnboarding();
+  });
+  skipInterests.addEventListener('click', () => {
+    // persist an empty array so we don't nag again
+    if (!loadInterests()) saveInterestsList([]);
+    closeOnboarding();
+  });
+  editInterestsBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    openOnboarding(getInterests());
+  });
+
+  // First visit: no key at all → show onboarding.
+  if (loadInterests() === null) openOnboarding([]);
 
   // --- COPY HOTLINE ---
   const copyBtn = document.getElementById('copyBtn');
@@ -645,6 +820,27 @@
     } catch(e){ return '--:--'; }
   }
 
+  function fmtDate(ts){
+    try {
+      const d = (ts && !isNaN(new Date(ts))) ? new Date(ts) : new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${dd}`;
+    } catch(e){
+      const d = new Date();
+      return d.toISOString().slice(0,10);
+    }
+  }
+
+  const SOURCE_LABELS = {hackernews:'HN', reddit:'RDT', request:'REQ', random:'RND'};
+  function srcLabel(src){
+    if (!src) return '?';
+    const k = String(src.source||'').toLowerCase();
+    if (SOURCE_LABELS[k]) return SOURCE_LABELS[k];
+    return k ? k.slice(0,3).toUpperCase() : '?';
+  }
+
   function relTime(ts){
     if (!ts) return '—';
     const d = new Date(ts);
@@ -696,6 +892,21 @@
     tick();
   }
 
+  function formatBody(text){
+    if (!text) return '';
+    let s = escapeHtml(text);
+    // Normalise bullet markers: "• ", "- ", or "* " at the start of a line
+    // or inline between sentences → force onto its own line.
+    s = s.replace(/\s*\n\s*/g, '\n');
+    s = s.replace(/(^|[^\n])\s*•\s+/g, '$1\n• ');
+    s = s.replace(/(^|[^\n])\s*-\s+(?=[A-Z0-9])/g, '$1\n- ');
+    s = s.replace(/^\n+/, '');
+    // Preserve blank lines between sections (two newlines → paragraph break).
+    s = s.replace(/\n{2,}/g, '<br><br>');
+    s = s.replace(/\n/g, '<br>');
+    return s;
+  }
+
   function buildDrop(d){
     const wrap = document.createElement('div');
     wrap.className = 'drop just-arrived';
@@ -708,15 +919,15 @@
     const srcB = d.source_b || {};
 
     wrap.innerHTML = `
-      <div class="ts">[██-██-████ • <span class="hhmm">${escapeHtml(fmtTime(d.ts))}</span>]</div>
+      <div class="ts">[${escapeHtml(fmtDate(d.ts))} • <span class="hhmm">${escapeHtml(fmtTime(d.ts))}</span>]</div>
       <div class="sources">
-        ${srcA.url ? `<a class="src" href="${escapeHtml(srcA.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcA.name||'HN')} ▸</b>${escapeHtml(srcA.title||'')}</a>` : ''}
-        ${srcB.url ? `<a class="src" href="${escapeHtml(srcB.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcB.name||'RDT')} ▸</b>${escapeHtml(srcB.title||'')}</a>` : ''}
+        ${srcA.url ? `<a class="src" href="${escapeHtml(srcA.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcLabel(srcA))} ▸</b>${escapeHtml(srcA.title||'')}</a>` : ''}
+        ${srcB.url ? `<a class="src" href="${escapeHtml(srcB.url)}" target="_blank" rel="noopener"><b>${escapeHtml(srcLabel(srcB))} ▸</b>${escapeHtml(srcB.title||'')}</a>` : ''}
       </div>
       <div class="drop-title"><span class="tw"></span></div>
       <div class="drop-body">
-        <span class="preview-cap">${escapeHtml(preview)}${needsUnfold?'…':''}</span>
-        <span class="full">${escapeHtml(d.body || '')}</span>
+        <span class="preview-cap">${formatBody(preview)}${needsUnfold?'…':''}</span>
+        <span class="full">${formatBody(d.body || '')}</span>
         ${needsUnfold ? '<div class="unfold">▸ tap to unfold</div>' : ''}
         ${d.loop_back ? `<div class="loop-back"><b>LOOP-BACK →</b> ${escapeHtml(d.loop_back)}</div>` : ''}
       </div>
@@ -890,7 +1101,7 @@
     outTitle.textContent = res.title || '(untitled)';
     // body may include paragraphs; split on blank lines
     const chunks = (res.body || '').split(/\n\s*\n/).filter(Boolean);
-    outBody.innerHTML = chunks.map(c => `<div class="ev">${escapeHtml(c)}</div>`).join('');
+    outBody.innerHTML = chunks.map(c => `<div class="ev">${formatBody(c)}</div>`).join('');
     outPips.innerHTML = pipsHtml(res.red_string_score || 0);
     if (res.loop_back){
       outLoop.style.display = 'block';
@@ -916,7 +1127,7 @@
       const r = await fetch('/api/conspiracy', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({thing_a:a, thing_b:b})
+        body: JSON.stringify({thing_a:a, thing_b:b, interests: getInterests()})
       });
       const data = await r.json();
       renderResult(data, {a, b});
@@ -933,7 +1144,11 @@
     randBtn.disabled = true;
     randBtn.textContent = 'ROLLING…';
     try {
-      const r = await fetch('/api/random', {method:'POST'});
+      const r = await fetch('/api/random', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({interests: getInterests()})
+      });
       const data = await r.json();
       if (data._pair){
         thingA.value = data._pair.thing_a || '';
@@ -960,7 +1175,8 @@
         body: JSON.stringify({
           thing_a: currentPair.a,
           thing_b: currentPair.b,
-          deeper_context: currentResult.body || ''
+          deeper_context: currentResult.body || '',
+          interests: getInterests()
         })
       });
       const data = await r.json();

@@ -1,5 +1,5 @@
 """
-Conspiracyyy — file-journal persistence.
+Livewire — file-journal persistence.
 
 Stores the rolling history of aired drops + de-dupe indexes so the cron scan
 never re-airs the same headline pair. The journal is also the source of

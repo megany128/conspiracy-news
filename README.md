@@ -1,4 +1,4 @@
-# Conspiracyyy 🔴
+# Livewire 🔴
 
 A 24/7 satirical conspiracy wire service that runs in Ara's cloud.
 Every 2 hours, an agent scans real news, picks two unrelated trending
@@ -25,7 +25,6 @@ Built for the Ara Hackathon (virality track).
     tools/
       news_sources.py    stdlib-only fetchers for HN, Reddit, NYT/BBC RSS,
                          Wikipedia "In the news" — no API keys
-      conspiracy.py      shared generate_conspiracy + rate_conspiracy
       journal.py         file-journal de-dupe + drop history
       broadcast.py       subscriber list, cooldown, SMS body formatter
     server.py            local HTTP server for the landing page

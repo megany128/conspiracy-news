@@ -1,5 +1,5 @@
 """
-Conspiracyyy — free news source fetchers.
+Livewire — free news source fetchers.
 
 Pulls from HN, Reddit, NYT RSS, BBC RSS, and Wikipedia "In the News" using
 stdlib only (urllib + xml.etree + json + email.utils). No API keys, no pip
